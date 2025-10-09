@@ -1,16 +1,15 @@
-#include "src/Config.h"
-#include "src/MotorDriver.h"
-#include "src/EncoderReader.h"
-#include "src/MotorControl.h"
-#include "src/MotionProfiles.h"
+#include "Config.h"
+#include "MotorDriver.h"
+#include "EncoderReader.h"
+#include "MotorControl.h"
+#include "MotionProfiles.h"
 
-// Create hardware instances using constexpr for compile-time initialization
-constexpr MotorDriver motor(MOTOR_PWM_PIN, MOTOR_INA_PIN, MOTOR_INB_PIN, MOTOR_CS_PIN);
-constexpr EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN);
+// Create hardware instances for runtime initialization
+MotorDriver motor(MOTOR_PWM_PIN, MOTOR_INA_PIN, MOTOR_INB_PIN, MOTOR_CS_PIN);
+EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN);
 
 // Controller needs to be non-const because it maintains state
-MotorControl controller(const_cast<MotorDriver&>(motor), 
-                        const_cast<EncoderReader&>(encoder));
+MotorControl controller(motor, encoder);
 
 // =======================================================
 // ================ Test Function Definitions ============
@@ -44,7 +43,7 @@ void test_stopMotor() {
 
 void test_printPosition() {
   const float pos = encoder.getPositionInches();
-  const long counts = encoder.getPositionCounts();
+  const float counts = encoder.getPositionInches();
   const float current = motor.readCurrent();
   
   Serial.print(F("Position: "));
@@ -219,7 +218,7 @@ void test_continuousMonitor() {
       
       // Get current values
       const float pos = encoder.getPositionInches();
-      const long counts = encoder.getPositionCounts();
+      const float counts = encoder.getPositionInches();
       const float current = motor.readCurrent();
       
       // Print formatted data
@@ -538,7 +537,7 @@ void test_backEMF() {
   unsigned long lastPrintMs = millis();
   
   // For velocity calculation
-  long lastPosition = encoder.getPositionCounts();
+  float lastPosition = encoder.getPositionInches();
   unsigned long lastVelocityMs = millis();
   
   bool testActive = true;
@@ -557,7 +556,7 @@ void test_backEMF() {
       lastSampleMs = now;
       
       // Calculate velocity from encoder
-      const long currentPosition = encoder.getPositionCounts();
+      const float currentPosition = encoder.getPositionInches();
       const unsigned long dt = now - lastVelocityMs;
       const float velocity_counts_per_sec = 
         (currentPosition - lastPosition) * 1000.0f / dt;
@@ -568,7 +567,8 @@ void test_backEMF() {
       lastVelocityMs = now;
       
       // Read voltage across motor (with 10k resistor, this is mostly back-EMF)
-      const float voltage = motor.readVoltage(); // Read voltage from current sense
+      // TODO: Implement readVoltage() in MotorDriver if needed
+      const float voltage = 0.0f; // Placeholder, no readVoltage() method
       
       // Only accumulate if wheel is actually spinning (avoid noise at zero)
       if (fabs(velocity_rad_per_sec) > 0.1f) {
@@ -640,477 +640,6 @@ void test_backEMF() {
 }
 
 // =======================================================
-// ========== Recursive Least Squares (RLS) =============
-// =======================================================
-
-// RLS state for electrical subsystem parameters
-struct RLS_Electrical {
-  // Parameters: [Δt/L, Δt·R/L, Δt·Kt/L]
-  float theta[3] = {0.1f, 0.5f, 0.01f}; // Initial guesses
-  float P[3][3];  // Covariance matrix
-  float lambda = 0.98f; // Forgetting factor
-  bool initialized = false;
-  
-  void init() {
-    // Initialize covariance with large uncertainty
-    constexpr float sigma_sq = 1000.0f;
-    for (int i = 0; i < 3; i++) {
-      for (int j = 0; j < 3; j++) {
-        P[i][j] = (i == j) ? sigma_sq : 0.0f;
-      }
-    }
-    initialized = true;
-  }
-  
-  void update(float voltage, float current, float current_prev, 
-              float velocity, float dt) {
-    // Measurement: y = i[k+1] - i[k]
-    const float y = current - current_prev;
-    
-    // Regressor: φ = [V[k], -i[k], -ω[k]]
-    float phi[3] = {voltage, -current_prev, -velocity};
-    
-    // Prediction: ŷ = φᵀ·θ
-    float y_pred = 0.0f;
-    for (int i = 0; i < 3; i++) {
-      y_pred += phi[i] * theta[i];
-    }
-    
-    // Innovation: ε = y - ŷ
-    const float epsilon = y - y_pred;
-    
-    // Compute P·φ
-    float P_phi[3] = {0.0f, 0.0f, 0.0f};
-    for (int i = 0; i < 3; i++) {
-      for (int j = 0; j < 3; j++) {
-        P_phi[i] += P[i][j] * phi[j];
-      }
-    }
-    
-    // Compute φᵀ·P·φ
-    float phi_P_phi = 0.0f;
-    for (int i = 0; i < 3; i++) {
-      phi_P_phi += phi[i] * P_phi[i];
-    }
-    
-    // Kalman gain: K = P·φ / (λ + φᵀ·P·φ)
-    float K[3];
-    const float denom = lambda + phi_P_phi;
-    for (int i = 0; i < 3; i++) {
-      K[i] = P_phi[i] / denom;
-    }
-    
-    // Update parameters: θ = θ + K·ε
-    for (int i = 0; i < 3; i++) {
-      theta[i] += K[i] * epsilon;
-    }
-    
-    // Update covariance: P = (P - K·φᵀ·P) / λ
-    for (int i = 0; i < 3; i++) {
-      for (int j = 0; j < 3; j++) {
-        P[i][j] = (P[i][j] - K[i] * P_phi[j]) / lambda;
-      }
-    }
-  }
-  
-  void getParameters(float dt, float &L, float &R, float &Kt) const {
-    // Extract physical parameters from θ
-    // θ = [Δt/L, Δt·R/L, Δt·Kt/L]
-    L = dt / theta[0];
-    R = theta[1] * L / dt;
-    Kt = theta[2] * L / dt;
-  }
-};
-
-RLS_Electrical rls_elec;
-
-// Continuous RLS mode flag
-bool continuousRLS = false;
-float rls_L = 0.0f, rls_R = 0.0f, rls_Kt = 0.0f;
-unsigned long lastRLSUpdate = 0;
-float rls_current_prev = 0.0f;
-
-void test_rlsElectrical() {
-  Serial.println(F("\n╔════════════════════════════════════╗"));
-  Serial.println(F("║  RECURSIVE LEAST SQUARES (RLS)     ║"));
-  Serial.println(F("║  Electrical Parameter Estimation   ║"));
-  Serial.println(F("╚════════════════════════════════════╝"));
-  Serial.println(F("Real-time parameter adaptation"));
-  Serial.println(F("Identifies: L (inductance), R (resistance), Kt (back-EMF)\n"));
-  
-  if (!rls_elec.initialized) {
-    rls_elec.init();
-    Serial.println(F("RLS initialized with default parameters"));
-  }
-  
-  Serial.println(F("Applying excitation signal (PRBS-like)..."));
-  Serial.println(F("Press any key to stop\n"));
-  
-  constexpr unsigned long TEST_DURATION_MS = 10000; // 10 seconds
-  constexpr float SAMPLE_RATE_HZ = 100.0f;
-  constexpr float DT = 1.0f / SAMPLE_RATE_HZ;
-  constexpr unsigned long SAMPLE_INTERVAL_MS = 
-    static_cast<unsigned long>(DT * 1000.0f);
-  
-  const unsigned long startMs = millis();
-  unsigned long lastSampleMs = startMs;
-  unsigned long lastPrintMs = startMs;
-  
-  float voltage = 0.0f;
-  float current_prev = motor.readCurrent();
-  int excitation_state = 0;
-  
-  Serial.println(F("Time(s) | L(mH)  | R(Ω)   | Kt(V·s/rad)"));
-  Serial.println(F("────────┼────────┼────────┼────────────"));
-  
-  bool testActive = true;
-  while (testActive && (millis() - startMs < TEST_DURATION_MS)) {
-    const unsigned long now = millis();
-    
-    // Check for exit
-    if (Serial.available()) {
-      Serial.read();
-      while (Serial.available()) Serial.read();
-      testActive = false;
-      break;
-    }
-    
-    if (now - lastSampleMs >= SAMPLE_INTERVAL_MS) {
-      lastSampleMs = now;
-      
-      // Generate pseudo-random excitation (simple PRBS-like)
-      excitation_state = (excitation_state + 1) % 20;
-      if (excitation_state < 5) voltage = 0.3f;
-      else if (excitation_state < 10) voltage = 0.6f;
-      else if (excitation_state < 15) voltage = -0.3f;
-      else voltage = 0.0f;
-      
-      motor.setSpeed(voltage);
-      
-      // Read measurements
-      const float current = motor.readCurrent();
-      const float velocity = encoder.getPositionInches(); // Simplified
-      
-      // Update RLS
-      rls_elec.update(voltage * ADC_REFERENCE_VOLTAGE, 
-                     current, current_prev, velocity, DT);
-      current_prev = current;
-      
-      // Print progress every 500ms
-      if (now - lastPrintMs >= 500) {
-        lastPrintMs = now;
-        
-        float L, R, Kt;
-        rls_elec.getParameters(DT, L, R, Kt);
-        
-        const float elapsed = (now - startMs) / 1000.0f;
-        Serial.print(elapsed, 1);
-        Serial.print(F("     | "));
-        Serial.print(L * 1000.0f, 2); // Convert to mH
-        Serial.print(F("   | "));
-        Serial.print(R, 2);
-        Serial.print(F("    | "));
-        Serial.println(Kt, 4);
-      }
-    }
-  }
-  
-  motor.stop();
-  
-  Serial.println(F("\n=== Final Parameters ==="));
-  float L, R, Kt;
-  rls_elec.getParameters(DT, L, R, Kt);
-  
-  Serial.print(F("Inductance L = "));
-  Serial.print(L * 1000.0f, 2);
-  Serial.println(F(" mH"));
-  Serial.print(F("Resistance R = "));
-  Serial.print(R, 2);
-  Serial.println(F(" Ω"));
-  Serial.print(F("Back-EMF Kt = "));
-  Serial.print(Kt, 4);
-  Serial.println(F(" V·s/rad"));
-  Serial.print(F("Torque Kt = "));
-  Serial.print(Kt, 4);
-  Serial.println(F(" N·m/A\n"));
-}
-
-void test_continuousRLS() {
-  if (!continuousRLS) {
-    Serial.println(F("\n╔════════════════════════════════════╗"));
-    Serial.println(F("║   CONTINUOUS RLS MODE ENABLED      ║"));
-    Serial.println(F("╚════════════════════════════════════╝"));
-    Serial.println(F("RLS now runs in background during all operations"));
-    Serial.println(F("Parameter estimates logged every 5 seconds"));
-    Serial.println(F("Use 'X' command to disable\n"));
-    
-    if (!rls_elec.initialized) {
-      rls_elec.init();
-      Serial.println(F("RLS initialized"));
-    }
-    
-    continuousRLS = true;
-    rls_current_prev = motor.readCurrent();
-    lastRLSUpdate = millis();
-    
-  } else {
-    Serial.println(F("\n╔════════════════════════════════════╗"));
-    Serial.println(F("║   CONTINUOUS RLS MODE DISABLED     ║"));
-    Serial.println(F("╚════════════════════════════════════╝"));
-    
-    Serial.println(F("Final parameter estimates:"));
-    Serial.print(F("  L = "));
-    Serial.print(rls_L * 1000.0f, 2);
-    Serial.println(F(" mH"));
-    Serial.print(F("  R = "));
-    Serial.print(rls_R, 2);
-    Serial.println(F(" Ω"));
-    Serial.print(F("  Kt = "));
-    Serial.print(rls_Kt, 4);
-    Serial.println(F(" V·s/rad\n"));
-    
-    continuousRLS = false;
-  }
-}
-
-void updateContinuousRLS() {
-  if (!continuousRLS) return;
-  
-  constexpr float RLS_SAMPLE_RATE_HZ = 50.0f; // 50Hz background rate
-  constexpr float RLS_DT = 1.0f / RLS_SAMPLE_RATE_HZ;
-  constexpr unsigned long RLS_INTERVAL_MS = 
-    static_cast<unsigned long>(RLS_DT * 1000.0f);
-  
-  const unsigned long now = millis();
-  
-  if (now - lastRLSUpdate >= RLS_INTERVAL_MS) {
-    lastRLSUpdate = now;
-    
-    // Get current measurements
-    const float current = motor.readCurrent();
-    const float velocity = encoder.getPositionInches(); // Simplified
-    const float voltage = 6.0f; // Approximate - would need actual PWM duty
-    
-    // Update RLS
-    rls_elec.update(voltage, current, rls_current_prev, velocity, RLS_DT);
-    rls_current_prev = current;
-    
-    // Extract parameters
-    rls_elec.getParameters(RLS_DT, rls_L, rls_R, rls_Kt);
-    
-    // Log every 5 seconds
-    static unsigned long lastLog = 0;
-    if (now - lastLog >= 5000) {
-      lastLog = now;
-      
-      DEBUG_PRINT(F("RLS: L="));
-      DEBUG_PRINT(rls_L * 1000.0f, 2);
-      DEBUG_PRINT(F("mH, R="));
-      DEBUG_PRINT(rls_R, 2);
-      DEBUG_PRINT(F("Ω, Kt="));
-      DEBUG_PRINTLN(rls_Kt, 4);
-    }
-  }
-}
-
-// =======================================================
-// ============ Falling Weight Test =====================
-// =======================================================
-
-void test_fallingWeight() {
-  Serial.println(F("\n╔════════════════════════════════════╗"));
-  Serial.println(F("║      FALLING WEIGHT TEST           ║"));
-  Serial.println(F("╚════════════════════════════════════╝"));
-  Serial.println(F("Measures moment of inertia (J) and friction (b)"));
-  Serial.println(F("by observing falling mass dynamics\n"));
-  
-  Serial.println(F("SETUP INSTRUCTIONS:"));
-  Serial.println(F("1. Wrap string around Ferris wheel at known radius"));
-  Serial.println(F("2. Attach known mass to string"));
-  Serial.println(F("3. Hold mass at starting position"));
-  Serial.println(F("4. Motor driver will be disabled"));
-  Serial.println(F("5. Release mass when prompted\n"));
-  
-  // Get test parameters
-  Serial.print(F("Enter mass in grams (e.g., 100): "));
-  while (!Serial.available()) delay(100);
-  const float mass_g = Serial.parseFloat();
-  while (Serial.available()) Serial.read();
-  Serial.println(mass_g, 1);
-  
-  Serial.print(F("Enter string radius in cm (e.g., 15): "));
-  while (!Serial.available()) delay(100);
-  const float radius_cm = Serial.parseFloat();
-  while (Serial.available()) Serial.read();
-  Serial.println(radius_cm, 1);
-  
-  const float mass_kg = mass_g / 1000.0f;
-  const float radius_m = radius_cm / 100.0f;
-  constexpr float g = 9.81f; // m/s²
-  
-  Serial.println(F("\nTest configuration:"));
-  Serial.print(F("  Mass: "));
-  Serial.print(mass_kg, 4);
-  Serial.println(F(" kg"));
-  Serial.print(F("  Radius: "));
-  Serial.print(radius_m, 3);
-  Serial.println(F(" m"));
-  Serial.print(F("  Expected torque: "));
-  Serial.print(mass_kg * g * radius_m, 4);
-  Serial.println(F(" N·m\n"));
-  
-  Serial.println(F("Ready to start test."));
-  Serial.print(F("Press any key, then RELEASE the mass..."));
-  while (!Serial.available()) delay(100);
-  Serial.read();
-  while (Serial.available()) Serial.read();
-  Serial.println(F("\n"));
-  
-  // Disable motor driver
-  motor.stop();
-  digitalWrite(MOTOR_INA_PIN, LOW);
-  digitalWrite(MOTOR_INB_PIN, LOW);
-  
-  Serial.println(F("Motor disabled. Waiting for motion to start..."));
-  
-  // Wait for motion to start (velocity threshold)
-  constexpr float START_THRESHOLD_COUNTS_PER_SEC = 10.0f;
-  long lastPos = encoder.getPositionCounts();
-  unsigned long lastTime = millis();
-  bool motionDetected = false;
-  
-  // Wait up to 5 seconds for motion
-  const unsigned long waitStart = millis();
-  while (!motionDetected && (millis() - waitStart < 5000)) {
-    delay(50);
-    const long currentPos = encoder.getPositionCounts();
-    const unsigned long currentTime = millis();
-    const float dt = (currentTime - lastTime) / 1000.0f;
-    const float velocity = (currentPos - lastPos) / dt;
-    
-    if (fabs(velocity) > START_THRESHOLD_COUNTS_PER_SEC) {
-      motionDetected = true;
-      Serial.println(F("Motion detected! Recording data..."));
-    }
-    
-    lastPos = currentPos;
-    lastTime = currentTime;
-  }
-  
-  if (!motionDetected) {
-    Serial.println(F("No motion detected. Test aborted."));
-    return;
-  }
-  
-  // Record falling motion
-  constexpr int MAX_SAMPLES = 500;
-  constexpr unsigned long SAMPLE_INTERVAL_MS = 10; // 100Hz
-  
-  float time_data[MAX_SAMPLES];
-  long position_data[MAX_SAMPLES];
-  int sampleCount = 0;
-  
-  const unsigned long testStart = millis();
-  unsigned long lastSample = testStart;
-  long startPosition = encoder.getPositionCounts();
-  
-  // Record until motion stops or buffer full
-  while (sampleCount < MAX_SAMPLES) {
-    const unsigned long now = millis();
-    
-    if (now - lastSample >= SAMPLE_INTERVAL_MS) {
-      lastSample = now;
-      
-      time_data[sampleCount] = (now - testStart) / 1000.0f;
-      position_data[sampleCount] = encoder.getPositionCounts() - startPosition;
-      sampleCount++;
-      
-      // Check if motion stopped (looking at last few samples)
-      if (sampleCount > 20) {
-        long recentMotion = abs(position_data[sampleCount-1] - 
-                               position_data[sampleCount-10]);
-        if (recentMotion < 5) {  // Less than 5 counts in 100ms
-          Serial.println(F("Motion stopped."));
-          break;
-        }
-      }
-    }
-    
-    delay(1);
-  }
-  
-  Serial.println(F("\n=== Data Collection Complete ==="));
-  Serial.print(F("Samples collected: "));
-  Serial.println(sampleCount);
-  Serial.print(F("Test duration: "));
-  Serial.print(time_data[sampleCount-1], 2);
-  Serial.println(F(" seconds"));
-  Serial.print(F("Total rotation: "));
-  Serial.print(position_data[sampleCount-1]);
-  Serial.println(F(" counts\n"));
-  
-  // Simple analysis: estimate terminal velocity and acceleration
-  // For more accurate results, use offline curve fitting
-  
-  // Find terminal velocity (average of last 20% of samples)
-  int terminalStart = sampleCount * 4 / 5;
-  float terminalVelocity = 0.0f;
-  int terminalCount = 0;
-  
-  for (int i = terminalStart; i < sampleCount - 1; i++) {
-    float dt = time_data[i+1] - time_data[i];
-    float dpos = (position_data[i+1] - position_data[i]) / COUNTS_PER_IN;
-    terminalVelocity += dpos / dt;
-    terminalCount++;
-  }
-  
-  if (terminalCount > 0) {
-    terminalVelocity /= terminalCount;
-    
-    // Convert to rad/s
-    const float omega_terminal = terminalVelocity * (2.0f * PI / TRAVEL_PER_REV_IN);
-    
-    // At terminal velocity: b·ω = m·g·r
-    const float b_estimated = (mass_kg * g * radius_m) / omega_terminal;
-    
-    Serial.println(F("=== Preliminary Results ==="));
-    Serial.print(F("Terminal velocity: "));
-    Serial.print(omega_terminal, 3);
-    Serial.println(F(" rad/s"));
-    Serial.print(F("Friction coefficient b ≈ "));
-    Serial.print(b_estimated, 6);
-    Serial.println(F(" N·m·s/rad\n"));
-    
-    Serial.println(F("For accurate J estimation, export data:"));
-    Serial.println(F("Format: time(s), position(counts)"));
-    Serial.print(F("Export data? (y/n): "));
-    while (!Serial.available()) delay(100);
-    char response = Serial.read();
-    while (Serial.available()) Serial.read();
-    Serial.println(response);
-    
-    if (response == 'y' || response == 'Y') {
-      Serial.println(F("\nDATA_START"));
-      for (int i = 0; i < sampleCount; i++) {
-        Serial.print(time_data[i], 4);
-        Serial.print(F(", "));
-        Serial.println(position_data[i]);
-      }
-      Serial.println(F("DATA_END\n"));
-      
-      Serial.println(F("Fit in Python to: y(t) = A*(1-exp(-t/tau)) + v0*t"));
-      Serial.println(F("where tau = (m + J/r²)/(b/r²)"));
-      Serial.println(F("Solve for J using known b from above."));
-    }
-  } else {
-    Serial.println(F("Could not determine terminal velocity."));
-    Serial.println(F("Mass may be too light or fall distance too short."));
-  }
-  
-  Serial.println();
-}
-
-// =======================================================
 // ================= Serial Menu System ==================
 // =======================================================
 
@@ -1170,7 +699,7 @@ void printStatus() {
   Serial.println(F("%)"));
   
   Serial.print(F("Encoder: "));
-  Serial.print(encoder.getPositionCounts());
+  Serial.print(encoder.getPositionInches());
   Serial.println(F(" counts"));
   
   Serial.print(F("Current: "));
@@ -1187,66 +716,6 @@ void printStatus() {
   
   Serial.println();
 }
-      case MotionMode::Proportional:
-#ifdef ENABLE_ADVANCED_CONTROL
-        currentMode = MotionMode::Trapezoidal;
-        break;
-      case MotionMode::Trapezoidal:
-#endif
-        currentMode = MotionMode::Linear;
-        break;
-    }
-    Serial.print(F("Motion mode changed to: "));
-    printMotionMode();
-  }
-  
-  void printMotionMode() const {
-    switch (currentMode) {
-      case MotionMode::Linear:
-        Serial.println(F("Linear (constant speed)"));
-        break;
-      case MotionMode::Proportional:
-        Serial.println(F("Proportional (slows near target)"));
-        break;
-#ifdef ENABLE_ADVANCED_CONTROL
-      case MotionMode::Trapezoidal:
-        Serial.println(F("Trapezoidal (smooth accel/decel)"));
-        break;
-#endif
-    }
-  }
-};
-
-CommandParser parser;
-
-// Performance monitoring (STM32 only)
-#ifdef ENABLE_PERFORMANCE_MONITORING
-class PerformanceMonitor {
-public:
-  void update() {
-    loopCount++;
-    const unsigned long now = millis();
-    
-    if (now - lastPrintMs >= 1000) {
-      const unsigned long elapsed = now - lastPrintMs;
-      const float loopsPerSec = (loopCount * 1000.0f) / static_cast<float>(elapsed);
-      
-      Serial.print(F("Performance: "));
-      Serial.print(loopsPerSec, 0);
-      Serial.println(F(" Hz"));
-      
-      loopCount = 0;
-      lastPrintMs = now;
-    }
-  }
-  
-private:
-  unsigned long loopCount = 0;
-  unsigned long lastPrintMs = 0;
-};
-
-PerformanceMonitor perfMon;
-#endif
 
 void setup() {
   // Initialize board-specific hardware (ADC, PWM, Serial)
@@ -1336,13 +805,16 @@ void loop() {
       }
       
       case 's':
-      case 'S':
         test_stopMotor();
         break;
-        
+      case 'S': // Capital S for step response
+        test_stepResponse();
+        break;
       case 'r':
-      case 'R':
         test_printPosition();
+        break;
+      case 'R': // Capital R for resistance test
+        test_resistanceMeasurement();
         break;
         
       case 'm':
@@ -1365,22 +837,12 @@ void loop() {
         test_currentLimit();
         break;
         
-      case 'R': // Capital R for resistance test
-        test_resistanceMeasurement();
-        break;
-        
       case 'K': // Capital K for back-EMF constant
         test_backEMF();
         break;
-        
-      case 'S': // Capital S for step response
-        test_stepResponse();
-        break;
-        
       case 'E': // Capital E for RLS electrical
         test_rlsElectrical();
         break;
-        
       case 'X': // Capital X for continuous RLS toggle
         test_continuousRLS();
         break;
@@ -1419,9 +881,9 @@ void loop() {
     const unsigned long elapsed = now - lastPrintMs;
     const float loopsPerSec = (loopCount * 1000.0f) / static_cast<float>(elapsed);
     
-    DEBUG_PRINT(F("Performance: "));
-    DEBUG_PRINT(loopsPerSec, 0);
-    DEBUG_PRINTLN(F(" Hz"));
+    Serial.print(F("Performance: "));
+    Serial.print(loopsPerSec, 0);
+    Serial.println(F(" Hz"));
     
     loopCount = 0;
     lastPrintMs = now;
@@ -1435,4 +897,16 @@ void loop() {
   #else
     delay(1);   // 1000Hz update rate on STM32
   #endif
+}
+
+void test_rlsElectrical() {
+  Serial.println(F("RLS Electrical test not implemented on Uno."));
+}
+
+void test_continuousRLS() {
+  Serial.println(F("Continuous RLS not implemented on Uno."));
+}
+
+void updateContinuousRLS() {
+  // No-op for Uno
 }
