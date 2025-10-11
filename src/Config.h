@@ -57,12 +57,12 @@ constexpr float ADC_COUNTS_PER_VOLT = ADC_MAX_VALUE / ADC_REFERENCE_VOLTAGE;
 
 // These Arduino pin numbers work on both boards thanks to Arduino pin mapping
 constexpr uint8_t MOTOR_PWM_PIN = 5;
-constexpr uint8_t MOTOR_INA_PIN = 6;
-constexpr uint8_t MOTOR_INB_PIN = 7;
+constexpr uint8_t MOTOR_INB_PIN = 6;
+constexpr uint8_t MOTOR_INA_PIN = 7;
 constexpr uint8_t MOTOR_CS_PIN  = A0;
 
-constexpr uint8_t ENCODER_A_PIN = 2;
-constexpr uint8_t ENCODER_B_PIN = 3;
+constexpr uint8_t ENCODER_A_PIN = 3;
+constexpr uint8_t ENCODER_B_PIN = 4;
 
 // ==============================================================================
 // SYSTEM PHYSICAL CONSTANTS
