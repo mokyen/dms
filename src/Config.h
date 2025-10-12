@@ -75,7 +75,8 @@ constexpr float PULLEY_CIRCUMFERENCE_IN = PULLEY_DIAMETER_IN * PI;
 
 constexpr float MAX_ROTATIONS = DISTANCE_TO_SYSTEM_IN / PULLEY_CIRCUMFERENCE_IN; // ~13.75 revolutions
 
-constexpr float MAX_TRAVEL_IN = DISTANCE_TO_SYSTEM_IN;
+constexpr float SAFETY_MARGIN_IN = 6.0f;  // Extra length to avoid bottoming out
+constexpr float MAX_TRAVEL_IN = DISTANCE_TO_SYSTEM_IN - SAFETY_MARGIN_IN; // ~210 inches
 
 // 64 CPR at motor shaft, 30:1 gearbox, 4x decoding (all edges)
 constexpr float ENCODER_CPR_MOTOR = 64.0f;
@@ -92,7 +93,7 @@ constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
 constexpr float MIN_DUTY_CYCLE = 0.2f;
 constexpr float MAX_DUTY_CYCLE = 0.95f;
 
-constexpr float POSITION_TOLERANCE_IN = 6.0f;   // stop within 1/4"
+constexpr float POSITION_TOLERANCE_IN = 0.25f;   // stop within 1/4"
 constexpr unsigned long MOVE_TIMEOUT_MS = 5000;  // safety stop
 
 // ==============================================================================

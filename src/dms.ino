@@ -30,10 +30,7 @@ void test_moveToPercent(float percent) {
   Serial.print(F("Moving to "));
   Serial.print(percent);
   Serial.println(F("% of travel..."));
-  
-  // Calculate target position
-  const float targetInches = (percent * 0.01f) * MAX_TRAVEL_IN;
-  MotionProfiles::moveToPosition(motor, encoder, targetInches, MIN_DUTY_CYCLE);
+  controller.moveToPositionPercent(percent);
 }
 
 void test_stopMotor() {
@@ -113,6 +110,7 @@ void test_jogMode() {
   Serial.println(F("x      - EXIT jog mode"));
   Serial.println();
   
+  float jogTarget = encoder.getPositionInches();
   bool jogActive = true;
   while (jogActive) {
     if (Serial.available()) {
@@ -122,24 +120,24 @@ void test_jogMode() {
         case '+':
         case 'w':
         case 'W': {
-          const float currentPos = encoder.getPositionInches();
-          const float targetPos = currentPos + JOG_DISTANCE_IN;
+          jogTarget += JOG_DISTANCE_IN;
+          if (jogTarget > MAX_TRAVEL_IN) jogTarget = MAX_TRAVEL_IN;
           Serial.print(F("Jog UP to "));
-          Serial.print(targetPos, 2);
+          Serial.print(jogTarget, 2);
           Serial.println(F(" in"));
-          MotionProfiles::moveToPosition(motor, encoder, targetPos, JOG_SPEED);
+          controller.moveToPositionPercent((jogTarget / MAX_TRAVEL_IN) * 100.0f);
           break;
         }
         
         case '-':
         case 's':
         case 'S': {
-          const float currentPos = encoder.getPositionInches();
-          const float targetPos = currentPos - JOG_DISTANCE_IN;
+          jogTarget -= JOG_DISTANCE_IN;
+          if (jogTarget < 0.0f) jogTarget = 0.0f;
           Serial.print(F("Jog DOWN to "));
-          Serial.print(targetPos, 2);
+          Serial.print(jogTarget, 2);
           Serial.println(F(" in"));
-          MotionProfiles::moveToPosition(motor, encoder, targetPos, JOG_SPEED);
+          controller.moveToPositionPercent((jogTarget / MAX_TRAVEL_IN) * 100.0f);
           break;
         }
         
