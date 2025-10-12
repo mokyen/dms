@@ -45,6 +45,10 @@ public:
     }
   }
 
+  void zero() {
+    position = 0;
+  }
+
 private:
   uint8_t pinA, pinB;
   volatile long position = 0;

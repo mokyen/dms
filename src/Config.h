@@ -90,7 +90,7 @@ constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
 // MOTION CONTROL TUNING
 // ==============================================================================
 
-constexpr float MIN_DUTY_CYCLE = 0.2f;
+constexpr float MIN_DUTY_CYCLE = 0.1f;
 constexpr float MAX_DUTY_CYCLE = 0.95f;
 
 constexpr float POSITION_TOLERANCE_IN = 0.25f;   // stop within 1/4"

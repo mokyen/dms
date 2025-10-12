@@ -52,6 +52,11 @@ void test_printPosition() {
   Serial.println(F(" A"));
 }
 
+void test_zeroEncoder() {
+  encoder.zero();
+  Serial.println(F("Encoder zeroed. Position set to 0."));
+}
+
 void test_rampUpSpeed() {
   static bool direction = true; // Alternate direction each call
   
@@ -650,6 +655,7 @@ void printHelp() {
   Serial.println(F("d       - Move to BOTTOM (min speed)"));
   Serial.println(F("p <num> - Move to % of travel (0-100)"));
   Serial.println(F("s       - STOP motor immediately"));
+  Serial.println(F("z       - Zero encoder position (set current as 0)"));
   Serial.println(F(""));
   Serial.println(F("=== Diagnostic Modes ==="));
   Serial.println(F("r       - READ encoder position & current"));
@@ -843,6 +849,11 @@ void loop() {
         break;
       case 'X': // Capital X for continuous RLS toggle
         test_continuousRLS();
+        break;
+        
+      case 'z':
+      case 'Z':
+        test_zeroEncoder();
         break;
         
       case 'h':
