@@ -10,6 +10,7 @@ public:
   void begin() {
     pinMode(pinA, INPUT_PULLUP);
     pinMode(pinB, INPUT_PULLUP);
+    instance = this;
     attachInterrupt(digitalPinToInterrupt(pinA), isrA, CHANGE);
     attachInterrupt(digitalPinToInterrupt(pinB), isrB, CHANGE);
   }
@@ -20,11 +21,28 @@ public:
     return position * INV_COUNTS_PER_IN;
   }
 
-  void handleInterrupt() {
+  long getPositionCounts() const {
+    return position;
+  }
+
+  void handleInterruptA() {
     bool a = digitalRead(pinA);
     bool b = digitalRead(pinB);
-    if (a == b) position++;
-    else position--;
+    if (a == b) {
+      position++;
+    } else {
+      position--;
+    }
+  }
+
+  void handleInterruptB() {
+    bool a = digitalRead(pinA);
+    bool b = digitalRead(pinB);
+    if (a != b) {
+      position++;
+    } else {
+      position--;
+    }
   }
 
 private:
@@ -32,8 +50,8 @@ private:
   volatile long position = 0;
   static EncoderReader* instance;
 
-  static void isrA() { if (instance) instance->handleInterrupt(); }
-  static void isrB() { if (instance) instance->handleInterrupt(); }
+  static void isrA() { if (instance) instance->handleInterruptA(); }
+  static void isrB() { if (instance) instance->handleInterruptB(); }
 };
 
 inline EncoderReader* EncoderReader::instance = nullptr;

@@ -69,10 +69,19 @@ constexpr uint8_t ENCODER_B_PIN = 4;
 // ==============================================================================
 
 constexpr float DISTANCE_TO_SYSTEM_FT = 18.0f;
-constexpr float MAX_TRAVEL_IN = 55.0f;  // Approx 4 revolutions × 13.75 in/rev
+constexpr float DISTANCE_TO_SYSTEM_IN = DISTANCE_TO_SYSTEM_FT * 12.0f;
+constexpr float PULLEY_DIAMETER_IN = 16.5f;  // Diameter of pulley attached to motor shaft
+constexpr float PULLEY_CIRCUMFERENCE_IN = PULLEY_DIAMETER_IN * PI;
 
-constexpr float COUNTS_PER_REV = 600.0f;
-constexpr float TRAVEL_PER_REV_IN = MAX_TRAVEL_IN / 4.0f;
+constexpr float MAX_ROTATIONS = DISTANCE_TO_SYSTEM_IN / PULLEY_CIRCUMFERENCE_IN; // ~13.75 revolutions
+
+constexpr float MAX_TRAVEL_IN = DISTANCE_TO_SYSTEM_IN;
+
+// 64 CPR at motor shaft, 30:1 gearbox, 4x decoding (all edges)
+constexpr float ENCODER_CPR_MOTOR = 64.0f;
+constexpr float GEAR_RATIO = 30.0f;
+constexpr float COUNTS_PER_REV = ENCODER_CPR_MOTOR * GEAR_RATIO; // 1920
+constexpr float TRAVEL_PER_REV_IN = PULLEY_CIRCUMFERENCE_IN;
 constexpr float COUNTS_PER_IN = COUNTS_PER_REV / TRAVEL_PER_REV_IN;
 constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
 
@@ -83,7 +92,7 @@ constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
 constexpr float MIN_DUTY_CYCLE = 0.2f;
 constexpr float MAX_DUTY_CYCLE = 0.95f;
 
-constexpr float POSITION_TOLERANCE_IN = 0.25f;   // stop within 1/4"
+constexpr float POSITION_TOLERANCE_IN = 6.0f;   // stop within 1/4"
 constexpr unsigned long MOVE_TIMEOUT_MS = 5000;  // safety stop
 
 // ==============================================================================

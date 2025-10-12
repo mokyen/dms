@@ -17,12 +17,12 @@ MotorControl controller(motor, encoder);
 
 void test_moveToTop() {
   Serial.println(F("Moving to TOP (min speed)..."));
-  MotionProfiles::moveToPosition(motor, encoder, MAX_TRAVEL_IN, MIN_DUTY_CYCLE);
+  controller.moveToPosition(MotorPosition::Top);
 }
 
 void test_moveToBottom() {
   Serial.println(F("Moving to BOTTOM (min speed)..."));
-  MotionProfiles::moveToPosition(motor, encoder, 0.0f, MIN_DUTY_CYCLE);
+  controller.moveToPosition(MotorPosition::Bottom);
 }
 
 void test_moveToPercent(float percent) {
@@ -43,7 +43,7 @@ void test_stopMotor() {
 
 void test_printPosition() {
   const float pos = encoder.getPositionInches();
-  const float counts = encoder.getPositionInches();
+  const float counts = encoder.getPositionCounts();
   const float current = motor.readCurrent();
   
   Serial.print(F("Position: "));
@@ -218,7 +218,7 @@ void test_continuousMonitor() {
       
       // Get current values
       const float pos = encoder.getPositionInches();
-      const float counts = encoder.getPositionInches();
+      const float counts = encoder.getPositionCounts();
       const float current = motor.readCurrent();
       
       // Print formatted data
@@ -699,7 +699,7 @@ void printStatus() {
   Serial.println(F("%)"));
   
   Serial.print(F("Encoder: "));
-  Serial.print(encoder.getPositionInches());
+  Serial.print(encoder.getPositionCounts());
   Serial.println(F(" counts"));
   
   Serial.print(F("Current: "));
