@@ -3,14 +3,16 @@
 #include "MotorDriver.h"
 #include "EncoderReader.h"
 
-enum class MotorPosition { Unknown, Top, Bottom, Moving };
+enum class MotorPosition { Unknown, Top, Bottom, Moving }; 
 
 class MotorControl {
 public:
   MotorControl(MotorDriver& driver, EncoderReader& encoder);
   void begin();
-  void moveToPosition(MotorPosition target);
-  void moveToPositionPercent(float targetPercent);
+  
+  // PRIMARY PUBLIC API: All moves now use counts
+  void moveToPositionCounts(long targetCounts);
+  
   void stopAtTop();
   void stopAtBottom();
   void update();
@@ -21,6 +23,10 @@ private:
   MotorDriver& motor;
   EncoderReader& encoder;
   MotorPosition position;
-  MotorPosition target;
+  MotorPosition target; // Tracks the *target* state (Top/Bottom/Unknown)
+  long targetCounts;
   unsigned long lastUpdateMs;
+
+  // Private helper function to consolidate the move initiation logic
+  void setTargetAndStartMove(long counts, MotorPosition state);
 };

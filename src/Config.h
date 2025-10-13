@@ -70,21 +70,31 @@ constexpr uint8_t ENCODER_B_PIN = 4;
 
 constexpr float DISTANCE_TO_SYSTEM_FT = 18.0f;
 constexpr float DISTANCE_TO_SYSTEM_IN = DISTANCE_TO_SYSTEM_FT * 12.0f;
-constexpr float PULLEY_DIAMETER_IN = 16.5f;  // Diameter of pulley attached to motor shaft
+constexpr float PULLEY_DIAMETER_IN = 16.5f;   // Diameter of pulley attached to motor shaft
 constexpr float PULLEY_CIRCUMFERENCE_IN = PULLEY_DIAMETER_IN * PI;
 
-constexpr float MAX_ROTATIONS = DISTANCE_TO_SYSTEM_IN / PULLEY_CIRCUMFERENCE_IN; // ~13.75 revolutions
+constexpr float MAX_ROTATIONS = DISTANCE_TO_SYSTEM_IN / PULLEY_CIRCUMFERENCE_IN;
 
 constexpr float SAFETY_MARGIN_IN = 6.0f;  // Extra length to avoid bottoming out
-constexpr float MAX_TRAVEL_IN = DISTANCE_TO_SYSTEM_IN - SAFETY_MARGIN_IN; // ~210 inches
+constexpr float MAX_TRAVEL_IN_FLOAT = DISTANCE_TO_SYSTEM_IN - SAFETY_MARGIN_IN; // ~210 inches
 
-// 64 CPR at motor shaft, 30:1 gearbox, 4x decoding (all edges)
+// 64 CPR at motor shaft (16 CPR but 4x encoding) , 30:1 gearbox
 constexpr float ENCODER_CPR_MOTOR = 64.0f;
 constexpr float GEAR_RATIO = 30.0f;
-constexpr float COUNTS_PER_REV = ENCODER_CPR_MOTOR * GEAR_RATIO; // 1920
+constexpr float COUNTS_PER_REV = ENCODER_CPR_MOTOR * GEAR_RATIO; // 1920.0f
 constexpr float TRAVEL_PER_REV_IN = PULLEY_CIRCUMFERENCE_IN;
+
+// Pre-calculate conversion factors for display/float-to-int conversion
 constexpr float COUNTS_PER_IN = COUNTS_PER_REV / TRAVEL_PER_REV_IN;
 constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
+
+// ==============================================================================
+// INTEGER MOTION CONSTANTS
+// ==============================================================================
+
+// Use long for counts to ensure sufficient range (32-bit: +/- 2 billion)
+constexpr long MAX_TRAVEL_COUNTS = (long)(MAX_TRAVEL_IN_FLOAT * COUNTS_PER_IN); 
+constexpr long POSITION_TOLERANCE_COUNTS = (long)(0.25f * COUNTS_PER_IN); // stop within 1/4"
 
 // ==============================================================================
 // MOTION CONTROL TUNING
@@ -93,7 +103,6 @@ constexpr float INV_COUNTS_PER_IN = 1.0f / COUNTS_PER_IN;
 constexpr float MIN_DUTY_CYCLE = 0.1f;
 constexpr float MAX_DUTY_CYCLE = 0.95f;
 
-constexpr float POSITION_TOLERANCE_IN = 0.25f;   // stop within 1/4"
 constexpr unsigned long MOVE_TIMEOUT_MS = 5000;  // safety stop
 
 // ==============================================================================
@@ -124,7 +133,7 @@ constexpr float ADC_TO_CURRENT = ADC_VOLTS_PER_COUNT * CURRENT_SENSE_A_PER_V * C
 #ifdef BOARD_STM32_NUCLEO
   constexpr uint32_t SERIAL_BAUD_RATE = 115200;  // STM32 can handle higher baud rates
 #else
-  constexpr uint32_t SERIAL_BAUD_RATE = 9600;    // Conservative for Arduino Uno
+  constexpr uint32_t SERIAL_BAUD_RATE = 9600;   // Conservative for Arduino Uno
 #endif
 
 // ==============================================================================
@@ -170,7 +179,7 @@ constexpr float ADC_TO_CURRENT = ADC_VOLTS_PER_COUNT * CURRENT_SENSE_A_PER_V * C
 #else // BOARD_ARDUINO_UNO
   // Arduino Uno needs optimization
   // #define ENABLE_ADVANCED_CONTROL // Uncomment if you have CPU headroom
-  #define AVOID_FLOAT_DIVISION       // Use multiplication by inverse instead
+  #define AVOID_FLOAT_DIVISION         // Use multiplication by inverse instead
   constexpr bool USE_LOOKUP_TABLES = true;   // Consider lookup tables for trig
 #endif
 
@@ -234,5 +243,6 @@ inline void initBoardSpecificHardware() {
 // MOTION PROFILE CONSTANTS (BOARD-INDEPENDENT)
 // ==============================================================================
 
-constexpr float INV_MAX_TRAVEL = 1.0f / MAX_TRAVEL_IN;
-constexpr float POSITION_TO_PHASE = PI * INV_MAX_TRAVEL;
+// Float-based constants are now unused in core control
+// constexpr float INV_MAX_TRAVEL = 1.0f / MAX_TRAVEL_IN;
+// constexpr float POSITION_TO_PHASE = PI * INV_MAX_TRAVEL;

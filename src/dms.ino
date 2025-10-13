@@ -17,20 +17,29 @@ MotorControl controller(motor, encoder);
 
 void test_moveToTop() {
   Serial.println(F("Moving to TOP (min speed)..."));
-  controller.moveToPosition(MotorPosition::Top);
+  // NEW LOGIC: Convert TOP to MAX_TRAVEL_COUNTS
+  controller.moveToPositionCounts(MAX_TRAVEL_COUNTS);
 }
 
 void test_moveToBottom() {
   Serial.println(F("Moving to BOTTOM (min speed)..."));
-  controller.moveToPosition(MotorPosition::Bottom);
+  // NEW LOGIC: Convert BOTTOM to 0L counts
+  controller.moveToPositionCounts(0L);
 }
 
 void test_moveToPercent(float percent) {
   percent = constrain(percent, 0.0f, 100.0f);
+  
+  // NEW LOGIC: Conversion from float percent to long counts
+  long targetCounts = (long)((percent / 100.0f) * MAX_TRAVEL_COUNTS);
+  
   Serial.print(F("Moving to "));
-  Serial.print(percent);
-  Serial.println(F("% of travel..."));
-  controller.moveToPositionPercent(percent);
+  Serial.print(percent, 1);
+  Serial.print(F("% of travel ("));
+  Serial.print(targetCounts);
+  Serial.println(F(" counts)..."));
+  
+  controller.moveToPositionCounts(targetCounts);
 }
 
 void test_stopMotor() {
@@ -40,7 +49,7 @@ void test_stopMotor() {
 
 void test_printPosition() {
   const float pos = encoder.getPositionInches();
-  const float counts = encoder.getPositionCounts();
+  const long counts = encoder.getPositionCounts();
   const float current = motor.readCurrent();
   
   Serial.print(F("Position: "));
@@ -103,7 +112,6 @@ void test_rampUpSpeed() {
 
 void test_jogMode() {
   constexpr float JOG_DISTANCE_IN = 0.5f; // Move 0.5 inches per jog
-  constexpr float JOG_SPEED = MIN_DUTY_CYCLE;
   
   Serial.println(F("\n╔════════════════════════════════════╗"));
   Serial.println(F("║          JOG MODE ACTIVE           ║"));
@@ -115,7 +123,11 @@ void test_jogMode() {
   Serial.println(F("x      - EXIT jog mode"));
   Serial.println();
   
-  float jogTarget = encoder.getPositionInches();
+  // Start with the current position in counts
+  long jogTargetCounts = encoder.getPositionCounts();
+  // Pre-calculate the jog distance in counts
+  const long JOG_DISTANCE_COUNTS = (long)(JOG_DISTANCE_IN * COUNTS_PER_IN);
+  
   bool jogActive = true;
   while (jogActive) {
     if (Serial.available()) {
@@ -125,24 +137,28 @@ void test_jogMode() {
         case '+':
         case 'w':
         case 'W': {
-          jogTarget += JOG_DISTANCE_IN;
-          if (jogTarget > MAX_TRAVEL_IN) jogTarget = MAX_TRAVEL_IN;
+          jogTargetCounts += JOG_DISTANCE_COUNTS;
+          if (jogTargetCounts > MAX_TRAVEL_COUNTS) jogTargetCounts = MAX_TRAVEL_COUNTS;
+          
           Serial.print(F("Jog UP to "));
-          Serial.print(jogTarget, 2);
-          Serial.println(F(" in"));
-          controller.moveToPositionPercent((jogTarget / MAX_TRAVEL_IN) * 100.0f);
+          Serial.print(jogTargetCounts);
+          Serial.println(F(" counts"));
+          
+          controller.moveToPositionCounts(jogTargetCounts);
           break;
         }
         
         case '-':
         case 's':
         case 'S': {
-          jogTarget -= JOG_DISTANCE_IN;
-          if (jogTarget < 0.0f) jogTarget = 0.0f;
+          jogTargetCounts -= JOG_DISTANCE_COUNTS;
+          if (jogTargetCounts < 0L) jogTargetCounts = 0L;
+          
           Serial.print(F("Jog DOWN to "));
-          Serial.print(jogTarget, 2);
-          Serial.println(F(" in"));
-          controller.moveToPositionPercent((jogTarget / MAX_TRAVEL_IN) * 100.0f);
+          Serial.print(jogTargetCounts);
+          Serial.println(F(" counts"));
+          
+          controller.moveToPositionCounts(jogTargetCounts);
           break;
         }
         
@@ -221,7 +237,7 @@ void test_continuousMonitor() {
       
       // Get current values
       const float pos = encoder.getPositionInches();
-      const float counts = encoder.getPositionCounts();
+      const long counts = encoder.getPositionCounts();
       const float current = motor.readCurrent();
       
       // Print formatted data
@@ -230,6 +246,7 @@ void test_continuousMonitor() {
       Serial.print(pos, 2);
       Serial.print(F("      | "));
       
+      if (counts < 10000) Serial.print(F(" "));
       if (counts < 1000) Serial.print(F(" "));
       if (counts < 100) Serial.print(F(" "));
       if (counts < 10) Serial.print(F(" "));
@@ -642,6 +659,18 @@ void test_backEMF() {
   Serial.println();
 }
 
+void test_rlsElectrical() {
+  Serial.println(F("RLS Electrical test not implemented on Uno."));
+}
+
+void test_continuousRLS() {
+  Serial.println(F("Continuous RLS not implemented on Uno."));
+}
+
+void updateContinuousRLS() {
+  // No-op for Uno
+}
+
 // =======================================================
 // ================= Serial Menu System ==================
 // =======================================================
@@ -699,7 +728,7 @@ void printStatus() {
   Serial.print(F("Position: "));
   Serial.print(encoder.getPositionInches(), 2);
   Serial.print(F(" in ("));
-  Serial.print((encoder.getPositionInches() / MAX_TRAVEL_IN) * 100.0f, 1);
+  Serial.print((encoder.getPositionInches() / MAX_TRAVEL_IN_FLOAT) * 100.0f, 1);
   Serial.println(F("%)"));
   
   Serial.print(F("Encoder: "));
@@ -747,7 +776,7 @@ void setup() {
   // Show compile-time constants
   Serial.println(F("\nSystem Configuration:"));
   Serial.print(F("  Max travel: "));
-  Serial.print(MAX_TRAVEL_IN);
+  Serial.print(MAX_TRAVEL_IN_FLOAT);
   Serial.println(F(" inches"));
   Serial.print(F("  Encoder: "));
   Serial.print(COUNTS_PER_REV, 0);
@@ -773,6 +802,9 @@ void setup() {
   // Optional: Automatic homing on startup
   // Uncomment the next line if you want to home to bottom on power-up
   // controller.homeToBottom();
+
+  Serial.print(F("POSITION_TOLERANCE_COUNTS = "));
+  Serial.println(POSITION_TOLERANCE_COUNTS);
 }
 
 void loop() {
@@ -906,16 +938,4 @@ void loop() {
   #else
     delay(1);   // 1000Hz update rate on STM32
   #endif
-}
-
-void test_rlsElectrical() {
-  Serial.println(F("RLS Electrical test not implemented on Uno."));
-}
-
-void test_continuousRLS() {
-  Serial.println(F("Continuous RLS not implemented on Uno."));
-}
-
-void updateContinuousRLS() {
-  // No-op for Uno
 }
