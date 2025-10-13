@@ -2,31 +2,38 @@
 #include <Arduino.h>
 #include "MotorDriver.h"
 #include "EncoderReader.h"
-
-enum class MotorPosition { Unknown, Top, Bottom, Moving }; 
+#include "Config.h"
 
 class MotorControl {
 public:
   MotorControl(MotorDriver& driver, EncoderReader& encoder);
+  
   void begin();
   
-  // PRIMARY PUBLIC API: All moves now use counts
-  void moveToPositionCounts(long targetCounts);
+  // Simple public API
+  void moveToCounts(long targetCounts, int maxSpeedPercent = 100);
+  void stop();
+  void emergencyStop();
   
-  void stopAtTop();
-  void stopAtBottom();
+  // Call this in loop() - handles all control logic
   void update();
-
-  MotorPosition currentPosition() const { return position; }
+  
+  // Status queries
+  bool isMoving() const { return moving; }
+  bool hasArrived() const { return arrived; }
+  long getTargetCounts() const { return targetCounts; }
+  long getError() const { return targetCounts - encoder.getPositionCounts(); }
 
 private:
   MotorDriver& motor;
   EncoderReader& encoder;
-  MotorPosition position;
-  MotorPosition target; // Tracks the *target* state (Top/Bottom/Unknown)
+  
   long targetCounts;
-  unsigned long lastUpdateMs;
-
-  // Private helper function to consolidate the move initiation logic
-  void setTargetAndStartMove(long counts, MotorPosition state);
+  float maxSpeedFraction;  // Stored as 0.0-1.0
+  bool moving;
+  bool arrived;
+  unsigned long moveStartMs;
+  
+  // Control law - easy to swap out for PID later
+  float computeControlOutput(long error);
 };

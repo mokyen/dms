@@ -2,7 +2,7 @@
 #include "MotorDriver.h"
 #include "EncoderReader.h"
 #include "MotorControl.h"
-#include "MotionProfiles.h"
+// #include "MotionProfiles.h"
 
 // Create hardware instances for runtime initialization
 MotorDriver motor(MOTOR_PWM_PIN, MOTOR_INA_PIN, MOTOR_INB_PIN, MOTOR_CS_PIN);
@@ -16,30 +16,24 @@ MotorControl controller(motor, encoder);
 // =======================================================
 
 void test_moveToTop() {
-  Serial.println(F("Moving to TOP (min speed)..."));
-  // NEW LOGIC: Convert TOP to MAX_TRAVEL_COUNTS
-  controller.moveToPositionCounts(MAX_TRAVEL_COUNTS);
+  Serial.println(F("Moving to TOP (45% speed)..."));
+  controller.moveToCounts(MAX_TRAVEL_COUNTS, 45);  // 45% for loaded operation
 }
 
 void test_moveToBottom() {
-  Serial.println(F("Moving to BOTTOM (min speed)..."));
-  // NEW LOGIC: Convert BOTTOM to 0L counts
-  controller.moveToPositionCounts(0L);
+  Serial.println(F("Moving to BOTTOM (45% speed)..."));
+  controller.moveToCounts(0L, 45);  // 45% for loaded operation
 }
 
 void test_moveToPercent(float percent) {
   percent = constrain(percent, 0.0f, 100.0f);
-  
-  // NEW LOGIC: Conversion from float percent to long counts
   long targetCounts = (long)((percent / 100.0f) * MAX_TRAVEL_COUNTS);
   
   Serial.print(F("Moving to "));
   Serial.print(percent, 1);
-  Serial.print(F("% of travel ("));
-  Serial.print(targetCounts);
-  Serial.println(F(" counts)..."));
+  Serial.println(F("%"));
   
-  controller.moveToPositionCounts(targetCounts);
+  controller.moveToCounts(targetCounts, 100);  // Full speed for manual positioning
 }
 
 void test_stopMotor() {
@@ -144,7 +138,7 @@ void test_jogMode() {
           Serial.print(jogTargetCounts);
           Serial.println(F(" counts"));
           
-          controller.moveToPositionCounts(jogTargetCounts);
+          controller.moveToCounts(jogTargetCounts);
           break;
         }
         
@@ -158,7 +152,7 @@ void test_jogMode() {
           Serial.print(jogTargetCounts);
           Serial.println(F(" counts"));
           
-          controller.moveToPositionCounts(jogTargetCounts);
+          controller.moveToCounts(jogTargetCounts);
           break;
         }
         
@@ -257,20 +251,20 @@ void test_continuousMonitor() {
       Serial.print(current, 3);
       Serial.print(F("     | "));
       
-      switch (controller.currentPosition()) {
-        case MotorPosition::Top:
-          Serial.println(F("TOP      "));
-          break;
-        case MotorPosition::Bottom:
-          Serial.println(F("BOTTOM   "));
-          break;
-        case MotorPosition::Moving:
-          Serial.println(F("MOVING   "));
-          break;
-        default:
-          Serial.println(F("UNKNOWN  "));
-          break;
-      }
+      // switch (controller.currentPosition()) {
+      //   case MotorPosition::Top:
+      //     Serial.println(F("TOP      "));
+      //     break;
+      //   case MotorPosition::Bottom:
+      //     Serial.println(F("BOTTOM   "));
+      //     break;
+      //   case MotorPosition::Moving:
+      //     Serial.println(F("MOVING   "));
+      //     break;
+      //   default:
+      //     Serial.println(F("UNKNOWN  "));
+      //     break;
+      // }
     }
     
     // Update controller
@@ -739,13 +733,13 @@ void printStatus() {
   Serial.print(motor.readCurrent(), 3);
   Serial.println(F(" A"));
   
-  Serial.print(F("State: "));
-  switch (controller.currentPosition()) {
-    case MotorPosition::Top: Serial.println(F("TOP")); break;
-    case MotorPosition::Bottom: Serial.println(F("BOTTOM")); break;
-    case MotorPosition::Moving: Serial.println(F("MOVING")); break;
-    default: Serial.println(F("UNKNOWN")); break;
-  }
+  // Serial.print(F("State: "));
+  // switch (controller.currentPosition()) {
+  //   case MotorPosition::Top: Serial.println(F("TOP")); break;
+  //   case MotorPosition::Bottom: Serial.println(F("BOTTOM")); break;
+  //   case MotorPosition::Moving: Serial.println(F("MOVING")); break;
+  //   default: Serial.println(F("UNKNOWN")); break;
+  // }
   
   Serial.println();
 }

@@ -1,103 +1,122 @@
 #include "MotorControl.h"
-#include "MotionProfiles.h"
-#include "Config.h"
 
 MotorControl::MotorControl(MotorDriver& driver, EncoderReader& enc)
-  : motor(driver), encoder(enc), position(MotorPosition::Unknown),
-    target(MotorPosition::Unknown), targetCounts(0), lastUpdateMs(0) {}
+  : motor(driver), encoder(enc), targetCounts(0), maxSpeedFraction(1.0f),
+    moving(false), arrived(false), moveStartMs(0) {}
 
 void MotorControl::begin() {
   motor.begin();
   encoder.begin();
   EncoderReader::attachInstance(&encoder);
-  position = MotorPosition::Unknown;
 }
 
-// --------------------------------------------------------------------------
-// PRIVATE HELPER: Central function to initiate any move
-// --------------------------------------------------------------------------
+void MotorControl::moveToCounts(long counts, int maxSpeedPercent) {
+  // Clamp to safe range
+  targetCounts = constrain(counts, 0L, MAX_TRAVEL_COUNTS);
+  maxSpeedPercent = constrain(maxSpeedPercent, 1, 100);
+  maxSpeedFraction = maxSpeedPercent / 100.0f;
+  
+  moving = true;
+  arrived = false;
+  moveStartMs = millis();
+  
+  Serial.print(F("Moving to: "));
+  Serial.print(targetCounts);
+  Serial.print(F(" counts @ "));
+  Serial.print(maxSpeedPercent);
+  Serial.println(F("% max speed"));
+}
 
-static long s_previousTargetCounts = 0; 
-void MotorControl::setTargetAndStartMove(long counts, MotorPosition state) {
+void MotorControl::stop() {
+  motor.stop();
+  moving = false;
+}
+
+void MotorControl::emergencyStop() {
+  motor.brake();
+  moving = false;
+  arrived = false;
+}
+
+float MotorControl::computeControlOutput(long error) {
+  // Current: Bang-bang with deceleration zone
+  // TODO: Replace with PID when ready
   
-  // Clamp counts to safe travel limits
-  if (counts < 0L) counts = 0L;
-  if (counts > MAX_TRAVEL_COUNTS) counts = MAX_TRAVEL_COUNTS;
+  long absError = labs(error);
   
-  targetCounts = counts;
-  target = state; // Store the state (Top, Bottom, or Unknown) for later status reporting
-  lastUpdateMs = millis();
-  
-  // Debug print logic
-  auto delta = labs(targetCounts - s_previousTargetCounts); 
-  if (delta > POSITION_TOLERANCE_COUNTS) {
-    Serial.print(F("Move target set to: "));
-    Serial.print(targetCounts);
-    Serial.println(F(" counts"));
-    s_previousTargetCounts = targetCounts;
+  // Check if arrived
+  if (absError <= POSITION_TOLERANCE_COUNTS) {
+    return 0.0f; // Will trigger brake in update()
   }
-
-  // Set initial speed/direction. The continuous 'update' handles the rest.
-  MotionProfiles::moveToPositionCounts(motor, encoder, targetCounts, 1.0f); 
-  position = MotorPosition::Moving;
-}
-
-// --------------------------------------------------------------------------
-// PUBLIC API: Simplified to only accept counts
-// --------------------------------------------------------------------------
-
-void MotorControl::moveToPositionCounts(long counts) {
-  // Determine the target state for internal tracking/arrival logic
-  MotorPosition targetState = MotorPosition::Unknown;
   
-  // Check if the target is functionally Top or Bottom for state tracking
-  if (labs(counts - MAX_TRAVEL_COUNTS) <= POSITION_TOLERANCE_COUNTS) {
-      targetState = MotorPosition::Top;
-  } else if (labs(counts) <= POSITION_TOLERANCE_COUNTS) {
-      targetState = MotorPosition::Bottom;
-  } 
-
-  // Delegate to the single initiation function
-  setTargetAndStartMove(counts, targetState);
+  // Deceleration zone - scale with max speed
+  // At 45% max speed, we need a shorter decel distance
+  const long BASE_DECEL_DISTANCE = (long)(18.0f * COUNTS_PER_IN);
+  long decelDistance = (long)(BASE_DECEL_DISTANCE * maxSpeedFraction);
+  
+  // Ensure minimum decel distance
+  if (decelDistance < (long)(3.0f * COUNTS_PER_IN)) {
+    decelDistance = (long)(3.0f * COUNTS_PER_IN);
+  }
+  
+  constexpr float MIN_SPEED_FRACTION = 0.15f;
+  
+  float speed;
+  if (absError > decelDistance) {
+    // Full speed (scaled by maxSpeedFraction)
+    speed = maxSpeedFraction;
+  } else {
+    // Linear ramp down in deceleration zone
+    float fraction = (float)absError / (float)decelDistance;
+    speed = MIN_SPEED_FRACTION + fraction * (maxSpeedFraction - MIN_SPEED_FRACTION);
+  }
+  
+  // Apply direction
+  return (error > 0) ? speed : -speed;
 }
-
-
-void MotorControl::stopAtTop()    { MotionProfiles::stopAtTop(motor, encoder); }
-void MotorControl::stopAtBottom() { MotionProfiles::stopAtBottom(motor, encoder); }
-
-// --------------------------------------------------------------------------
-// UPDATE LOOP: Stays focused on counts
-// --------------------------------------------------------------------------
 
 void MotorControl::update() {
-  if (position != MotorPosition::Moving) return;
-
-  unsigned long now = millis();
-  if (now - lastUpdateMs > MOVE_TIMEOUT_MS) {
-    motor.stop();
-    position = MotorPosition::Unknown;
-    target = MotorPosition::Unknown;
-    Serial.println(F("ERROR: Move timed out. Stopping."));
+  if (!moving) return;
+  
+  // Timeout check
+  if (millis() - moveStartMs > MOVE_TIMEOUT_MS) {
+    emergencyStop();
+    Serial.println(F("ERROR: Move timeout!"));
     return;
   }
   
-  // P-Controller Loop: Continuously drive the motor toward the targetCounts
-  MotionProfiles::moveToPositionCounts(motor, encoder, targetCounts, 1.0f);
-
-  // Check if the motor has successfully reached the target
-  long currentError = labs(targetCounts - encoder.getPositionCounts());
-  if (currentError <= POSITION_TOLERANCE_COUNTS) {
-      motor.brake();
-      
-      // Update the position state based on the tracked 'target'
-      if (target == MotorPosition::Top)
-          position = MotorPosition::Top;
-      else if (target == MotorPosition::Bottom)
-          position = MotorPosition::Bottom;
-      else 
-          // Covers any other count-based movements
-          position = MotorPosition::Unknown; 
-          
-      target = MotorPosition::Unknown; // Clear target after arrival
+  // Get current error
+  long currentPos = encoder.getPositionCounts();
+  long error = targetCounts - currentPos;
+  long absError = labs(error);
+  
+  // Debug output (throttled)
+  static unsigned long lastDebugMs = 0;
+  if (millis() - lastDebugMs > 500) {
+    Serial.print(F("pos="));
+    Serial.print(currentPos);
+    Serial.print(F(" tgt="));
+    Serial.print(targetCounts);
+    Serial.print(F(" err="));
+    Serial.println(error);
+    lastDebugMs = millis();
   }
+  
+  // Compute control output
+  float output = computeControlOutput(error);
+  
+  // Check if we've arrived
+  if (absError <= POSITION_TOLERANCE_COUNTS) {
+    motor.brake();
+    moving = false;
+    arrived = true;
+    
+    Serial.print(F("Arrived! Final error: "));
+    Serial.print(error);
+    Serial.println(F(" counts"));
+    return;
+  }
+  
+  // Apply control
+  motor.setSpeed(output);
 }
