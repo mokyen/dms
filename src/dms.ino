@@ -1,7 +1,8 @@
 #include "Config.h"
 #include "MotorDriver.h"
 #include "EncoderReader.h"
-#include "MotorControl.h"
+// #include "MotorControl.h"
+#include "MotorControlPid.h"
 // #include "MotionProfiles.h"
 
 // Create hardware instances for runtime initialization
@@ -17,7 +18,7 @@ MotorControl controller(motor, encoder);
 
 void test_moveToTop() {
   Serial.println(F("Moving to TOP (45% speed)..."));
-  controller.moveToCounts(MAX_TRAVEL_COUNTS, 45);  // 45% for loaded operation
+  controller.moveToCounts(MAX_TRAVEL_COUNTS, 65);  // 45% for loaded operation
 }
 
 void test_moveToBottom() {

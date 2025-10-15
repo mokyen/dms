@@ -68,7 +68,9 @@ constexpr uint8_t ENCODER_B_PIN = 4;
 // SYSTEM PHYSICAL CONSTANTS
 // ==============================================================================
 
-constexpr float DISTANCE_TO_SYSTEM_FT = 18.0f;
+// constexpr float DISTANCE_TO_SYSTEM_FT = 18.0f;
+
+constexpr float DISTANCE_TO_SYSTEM_FT = 82.37f/12.0f; //Indoor testing
 constexpr float DISTANCE_TO_SYSTEM_IN = DISTANCE_TO_SYSTEM_FT * 12.0f;
 constexpr float PULLEY_DIAMETER_IN = 16.5f;   // Diameter of pulley attached to motor shaft
 constexpr float PULLEY_CIRCUMFERENCE_IN = PULLEY_DIAMETER_IN * PI;
