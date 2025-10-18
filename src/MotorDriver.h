@@ -32,6 +32,18 @@ public:
       return;
     }
     analogWrite(pwmPin, pwmValue);
+
+    constexpr bool debugMotorDriver = false;
+    if (debugMotorDriver) {
+      Serial.print(F(" pwm="));
+      Serial.print(pwmValue);
+      Serial.print(F(" duty="));
+      Serial.print(magnitude, 3);
+      Serial.print(F(" cmd="));
+      Serial.print(command, 3);
+      Serial.print(F(" cur="));
+      Serial.println(readCurrent(), 3);
+    }
   }
 
   void stop() {

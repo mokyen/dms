@@ -4,6 +4,7 @@
 // #include "MotorControl.h"
 #include "MotorControlPid.h"
 // #include "MotionProfiles.h"
+#include "SpiderPatterns.h"
 
 // Create hardware instances for runtime initialization
 MotorDriver motor(MOTOR_PWM_PIN, MOTOR_INA_PIN, MOTOR_INB_PIN, MOTOR_CS_PIN);
@@ -697,6 +698,15 @@ void printHelp() {
   Serial.println(F("E       - RLS electrical params (L, R, Kt)"));
   Serial.println(F("X       - TOGGLE continuous RLS (background)"));
   Serial.println(F(""));
+  Serial.println(F("=== Spider Patterns ==="));
+  Serial.println(F("1       - Stalker Pattern"));
+  Serial.println(F("2       - Pounce Pattern"));
+  Serial.println(F("3       - Patrol Pattern"));
+  Serial.println(F("4       - Twitch Pattern"));
+  Serial.println(F("5       - Lurker Pattern"));
+  Serial.println(F("A       - Haunting Mode"));
+  Serial.println(F("T       - Run Random Pattern"));
+  Serial.println(F(""));
   Serial.println(F("h       - Show this help menu"));
   Serial.println(F("?       - Show system status"));
   Serial.println();
@@ -883,6 +893,28 @@ void loop() {
         test_zeroEncoder();
         break;
         
+      case '1':
+        SpiderPatterns::pattern_stalker(controller, encoder);
+        break;
+      case '2':
+        SpiderPatterns::pattern_pounce(controller, encoder);
+        break;
+      case '3':
+        SpiderPatterns::pattern_patrol(controller, encoder);
+        break;
+      case '4':
+        SpiderPatterns::pattern_twitch(controller, encoder);
+        break;
+      case '5':
+        SpiderPatterns::pattern_lurker(controller, encoder);
+        break;
+      case 'A':
+        SpiderPatterns::hauntingMode(controller, encoder);
+        break;
+      case 'T':
+        SpiderPatterns::runRandomPattern(controller, encoder);
+        break;
+
       case 'h':
       case 'H':
         printHelp();

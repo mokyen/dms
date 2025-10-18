@@ -31,7 +31,8 @@ void MotorControl::moveToCounts(long counts, int maxSpeedPercent) {
   pidSetpoint = (double)targetCounts;
   
   // Reset PID output limits based on max speed
-  pid->SetOutputLimits(-maxSpeedFraction, maxSpeedFraction);
+  //   pid->SetOutputLimits(-maxSpeedFraction, maxSpeedFraction);
+  pid->SetOutputLimits(-1.0, 1.0); // DEBUG ONLY - revert after verifying motor capability
   
   moving = true;
   arrived = false;

@@ -43,7 +43,8 @@ private:
   PID* pid;
   
   // PID gains - conservative for minimal overshoot
-  static constexpr double Kp = 0.0003;  // Was 0.0008 - too aggressive
-  static constexpr double Ki = 0.00015;     // Keep zero
-  static constexpr double Kd = 0.0001;  // Was 0.002 - WAY too high
+  static constexpr double Kp = 0.0006;
+  static constexpr double Ki = 0.0008;   // increased from 0.00015
+  static constexpr double Kd = 0.00012;
+
 };
