@@ -359,6 +359,57 @@ void test_currentLimit() {
   Serial.println();
 }
 
+void test_manualDutyMode() {
+  Serial.println(F("\n╔════════════════════════════════════╗"));
+  Serial.println(F("║     MANUAL DUTY CONTROL MODE       ║"));
+  Serial.println(F("╚════════════════════════════════════╝"));
+  Serial.println(F("+ or w - Increase duty (upward)"));
+  Serial.println(F("- or s - Decrease duty (downward)"));
+  Serial.println(F("0      - Stop motor"));
+  Serial.println(F("x      - EXIT manual duty mode"));
+  Serial.println();
+
+  float duty = 0.0f;
+  const float step = 0.02f;
+  bool active = true;
+
+  while (active) {
+    if (Serial.available()) {
+      char cmd = Serial.read();
+      switch (cmd) {
+        case '+':
+        case 'w':
+        case 'W':
+          duty = constrain(duty + step, -1.0f, 1.0f);
+          Serial.print(F("Duty ↑ to "));
+          Serial.println(duty, 2);
+          motor.setSpeed(duty);
+          break;
+        case '-':
+        case 's':
+        case 'S':
+          duty = constrain(duty - step, -1.0f, 1.0f);
+          Serial.print(F("Duty ↓ to "));
+          Serial.println(duty, 2);
+          motor.setSpeed(duty);
+          break;
+        case '0':
+          duty = 0.0f;
+          motor.stop();
+          Serial.println(F("Motor stopped."));
+          break;
+        case 'x':
+        case 'X':
+          active = false;
+          motor.stop();
+          Serial.println(F("Exiting manual duty mode."));
+          break;
+      }
+    }
+    delay(20);
+  }
+}
+
 // =======================================================
 // ============ System Identification Tests ==============
 // =======================================================
@@ -690,6 +741,7 @@ void printHelp() {
   Serial.println(F("=== Testing Modes ==="));
   Serial.println(F("m       - RAMP speed test (alternates dir)"));
   Serial.println(F("l       - CURRENT LIMIT test"));
+  Serial.println(F("f       - MANUAL DUTY CONTROL mode"));
   Serial.println(F(""));
   Serial.println(F("=== System ID Tests ==="));
   Serial.println(F("R       - RESISTANCE measurement (R)"));
@@ -706,6 +758,10 @@ void printHelp() {
   Serial.println(F("5       - Lurker Pattern"));
   Serial.println(F("A       - Haunting Mode"));
   Serial.println(F("T       - Run Random Pattern"));
+  Serial.println(F(""));
+  Serial.println(F("=== Control Parameters ==="));
+  Serial.println(F("F <val> - Set feed-forward (0.0–0.5)"));
+  Serial.println(F("Q <num> - Set PID profile (1=Gentle, 2=Balanced, 3=Responsive)"));
   Serial.println(F(""));
   Serial.println(F("h       - Show this help menu"));
   Serial.println(F("?       - Show system status"));
@@ -744,14 +800,16 @@ void printStatus() {
   Serial.print(motor.readCurrent(), 3);
   Serial.println(F(" A"));
   
-  // Serial.print(F("State: "));
-  // switch (controller.currentPosition()) {
-  //   case MotorPosition::Top: Serial.println(F("TOP")); break;
-  //   case MotorPosition::Bottom: Serial.println(F("BOTTOM")); break;
-  //   case MotorPosition::Moving: Serial.println(F("MOVING")); break;
-  //   default: Serial.println(F("UNKNOWN")); break;
-  // }
-  
+  Serial.print(F("\n=== Control Parameters ==="));
+  Serial.print(F("\nFeed-forward: "));
+  Serial.println(controller.getFeedForward(), 3);
+  Serial.print(F("PID profile: "));
+  switch (controller.getPidProfile()) {
+    case PidProfile::Gentle:     Serial.println(F("Gentle")); break;
+    case PidProfile::Balanced:   Serial.println(F("Balanced")); break;
+    case PidProfile::Responsive: Serial.println(F("Responsive")); break;
+  }
+  Serial.println(F("=========================="));
   Serial.println();
 }
 
@@ -829,12 +887,9 @@ void loop() {
       case 'U':
         test_moveToTop();
         break;
-        
       case 'd':
-      case 'D':
         test_moveToBottom();
         break;
-        
       case 'p':
       case 'P': {
         // Extract number after 'p'
@@ -844,55 +899,51 @@ void loop() {
         test_moveToPercent(percent);
         break;
       }
-      
       case 's':
         test_stopMotor();
         break;
-      case 'S': // Capital S for step response
+      case 'S':
         test_stepResponse();
         break;
       case 'r':
         test_printPosition();
         break;
-      case 'R': // Capital R for resistance test
+      case 'R':
         test_resistanceMeasurement();
         break;
-        
       case 'm':
       case 'M':
         test_rampUpSpeed();
         break;
-        
       case 'j':
       case 'J':
         test_jogMode();
         break;
-        
       case 'c':
       case 'C':
         test_continuousMonitor();
         break;
-        
       case 'l':
       case 'L':
         test_currentLimit();
         break;
-        
-      case 'K': // Capital K for back-EMF constant
+      case 'f':
+      case 'F':
+        test_manualDutyMode();
+        break;
+      case 'K':
         test_backEMF();
         break;
-      case 'E': // Capital E for RLS electrical
+      case 'E':
         test_rlsElectrical();
         break;
-      case 'X': // Capital X for continuous RLS toggle
+      case 'X':
         test_continuousRLS();
         break;
-        
       case 'z':
       case 'Z':
         test_zeroEncoder();
         break;
-        
       case '1':
         SpiderPatterns::pattern_stalker(controller, encoder);
         break;
@@ -914,16 +965,32 @@ void loop() {
       case 'T':
         SpiderPatterns::runRandomPattern(controller, encoder);
         break;
-
+      case 'F': {
+        float newFF = Serial.parseFloat();
+        if (newFF >= 0.0f && newFF <= 0.5f) {
+          controller.setFeedForward(newFF);
+          Serial.print(F("Feed-forward set to "));
+          Serial.println(newFF, 3);
+        } else {
+          Serial.println(F("Feed-forward must be 0.0–0.5"));
+        }
+        break;
+      }
+      case 'Q': {
+        int idx = Serial.parseInt();
+        PidProfile profile = PidProfile::Gentle;
+        if (idx == 2) profile = PidProfile::Balanced;
+        else if (idx == 3) profile = PidProfile::Responsive;
+        controller.setPidProfile(profile);
+        break;
+      }
       case 'h':
       case 'H':
         printHelp();
         break;
-        
       case '?':
         printStatus();
         break;
-        
       default:
         Serial.print(F("Unknown command: "));
         Serial.println(cmd);

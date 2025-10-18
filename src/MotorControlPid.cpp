@@ -1,4 +1,5 @@
 #include "MotorControlPid.h"
+#include <Arduino.h>
 
 MotorControl::MotorControl(MotorDriver& driver, EncoderReader& enc)
   : motor(driver), encoder(enc), targetCounts(0), maxSpeedFraction(1.0f),
@@ -7,12 +8,13 @@ MotorControl::MotorControl(MotorDriver& driver, EncoderReader& enc)
 {
   // Initialize PID
   // Note: PID library uses pointer to variables, so they must persist
-  pid = new PID(&pidInput, &pidOutput, &pidSetpoint, Kp, Ki, Kd, DIRECT);
+  pid = new PID(&pidInput, &pidOutput, &pidSetpoint, Kp_Gentle, Ki_Gentle, Kd_Gentle, DIRECT);
   
   // Configure PID
   pid->SetMode(AUTOMATIC);
   pid->SetOutputLimits(-1.0, 1.0);  // Motor speed range
   pid->SetSampleTime(10);  // 10ms update rate (100Hz)
+  activeProfile = PidProfile::Gentle;
 }
 
 void MotorControl::begin() {
@@ -68,6 +70,23 @@ void MotorControl::setPIDGains(double kp, double ki, double kd) {
   Serial.println(kd, 4);
 }
 
+void MotorControl::setPidProfile(PidProfile profile) {
+  activeProfile = profile;
+  double kp, ki, kd;
+  switch (profile) {
+    case PidProfile::Gentle:
+      kp = Kp_Gentle; ki = Ki_Gentle; kd = Kd_Gentle; break;
+    case PidProfile::Balanced:
+      kp = Kp_Balanced; ki = Ki_Balanced; kd = Kd_Balanced; break;
+    case PidProfile::Responsive:
+      kp = Kp_Responsive; ki = Ki_Responsive; kd = Kd_Responsive; break;
+  }
+  pid->SetTunings(kp, ki, kd);
+  Serial.print(F("PID profile set: "));
+  Serial.println((profile == PidProfile::Gentle) ? "Gentle" :
+                 (profile == PidProfile::Balanced) ? "Balanced" : "Responsive");
+}
+
 void MotorControl::update() {
   if (!moving) return;
   
@@ -116,6 +135,22 @@ void MotorControl::update() {
   pid->SetMode(AUTOMATIC);  // Ensure PID is active
   pid->Compute();
   
+  // Add feed-forward term
+  float ff = 0.0f;
+  if (error > 0)       ff =  feedForward;
+  else if (error < 0)  ff = -feedForward;
+
+  float command = (float)pidOutput + ff;
+
+  // Deadband to prevent motor hum at zero
+  if (fabs(command) < CMD_DEADBAND) {
+    motor.stop();
+    return;
+  }
+
+  // Constrain final command to max speed for this move
+  command = constrain(command, -maxSpeedFraction, maxSpeedFraction);
+  
   // Apply control output
-  motor.setSpeed((float)pidOutput);
+  motor.setSpeed(command);
 }

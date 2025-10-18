@@ -45,3 +45,4 @@
 .build/
 .venv/
 get-platformio.py
+.vscode/

@@ -5,6 +5,21 @@
 #include "EncoderReader.h"
 #include "Config.h"
 
+// --- PID Profiles ---
+enum class PidProfile { Gentle, Balanced, Responsive };
+
+static constexpr double Kp_Gentle     = 0.00040;
+static constexpr double Ki_Gentle     = 0.00050;
+static constexpr double Kd_Gentle     = 0.00008;
+
+static constexpr double Kp_Balanced   = 0.00055;
+static constexpr double Ki_Balanced   = 0.00070;
+static constexpr double Kd_Balanced   = 0.00012;
+
+static constexpr double Kp_Responsive = 0.00090;
+static constexpr double Ki_Responsive = 0.00090;
+static constexpr double Kd_Responsive = 0.00018;
+
 class MotorControl {
 public:
   MotorControl(MotorDriver& driver, EncoderReader& encoder);
@@ -27,6 +42,10 @@ public:
   
   // PID tuning (optional - can adjust at runtime)
   void setPIDGains(double kp, double ki, double kd);
+  void setFeedForward(float ff) { feedForward = ff; }
+  float getFeedForward() const { return feedForward; }
+  void setPidProfile(PidProfile profile);
+  PidProfile getPidProfile() const { return activeProfile; }
 
 private:
   MotorDriver& motor;
@@ -41,10 +60,8 @@ private:
   // PID variables (must be double for PID library)
   double pidInput, pidOutput, pidSetpoint;
   PID* pid;
-  
-  // PID gains - conservative for minimal overshoot
-  static constexpr double Kp = 0.0006;
-  static constexpr double Ki = 0.0008;   // increased from 0.00015
-  static constexpr double Kd = 0.00012;
 
+  float feedForward = 0.18f;
+  PidProfile activeProfile = PidProfile::Gentle;
+  static constexpr float CMD_DEADBAND = 0.02f;
 };
