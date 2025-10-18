@@ -1,0 +1,112 @@
+@startuml
+' DMS Clean Architecture - Class Diagram
+' Generated from code-level C4 diagram, now as a class diagram
+
+' =============================
+' Adapters Layer
+' =============================
+class MotorDriver {
+  +MotorDriver(uint8_t pwm, uint8_t ina, uint8_t inb, uint8_t cs)
+  +void begin()
+  +void stop()
+  +void brake()
+  +float readCurrent() const
+}
+
+class EncoderReader {
+  +EncoderReader(uint8_t pinA, uint8_t pinB)
+  +void begin()
+  +float getPositionInches() const
+  +long getPositionCounts() const
+  +void zero()
+  +static void attachInstance(EncoderReader* inst)
+}
+
+class SerialCommandAdapter {
+  +SerialCommandAdapter(MotionController& controller)
+  +void processSerial()
+}
+
+' =============================
+' Application Layer
+' =============================
+class MotorControlPid {
+  +MotorControlPid(MotorDriver& driver, EncoderReader& encoder)
+  +void begin()
+  +void moveToCounts(long targetCounts, int maxSpeedPercent = 100)
+  +void stop()
+  +void emergencyStop()
+  +void update()
+  +bool isMoving() const
+  +bool hasArrived() const
+  +long getTargetCounts() const
+  +long getError() const
+}
+
+class MotionController {
+  +MotionController(MotorControlPid& pid, EncoderReader& encoder, MotorDriver& motor)
+  +void handleCommand(char cmd, float value)
+  +void update()
+  +void moveToTop()
+  +void moveToBottom()
+  +void moveToPercent(float percent)
+  +void stopMotor()
+  +void printPosition()
+  +void zeroEncoder()
+  +void rampUpSpeed()
+  +void jogMode()
+  +void continuousMonitor()
+  +void currentLimitTest()
+  +void manualDutyMode()
+  +void resistanceMeasurement()
+  +void stepResponse()
+  +void backEMFTest()
+  +void rlsElectricalTest()
+  +void continuousRLSTest()
+  +void updateContinuousRLS()
+  +void printHelp()
+  +void printStatus()
+  +void runPattern(int patternId)
+  +void hauntingMode()
+  +void runRandomPattern()
+  +void setFeedForward(float ff)
+  +void setPidProfile(int idx)
+}
+
+' Use stereotype N for namespace-like free function containers
+class MotorSequencer <<N>> {
+  +void runUpdateUntil(MotorControlPid& controller, UpdateCriterion criterion)
+  +TimeoutCriterion timeout(unsigned long ms)
+  +CountCriterion count(size_t n)
+  +PredicateCriterion predicate(std::function<bool()> fn)
+  +void runUpdateUntilArrived(MotorControlPid& controller, unsigned long timeoutMs = 10000)
+}
+
+class SpiderPatterns <<N>> {
+  +long inchesToCounts(float inches)
+  +float countsToInches(long counts)
+  +void cruiseToPosition(MotorControlPid& controller, EncoderReader& encoder, float targetInches, float velocityInchesPerSec, int updateRateHz = 50)
+  +void pattern_stalker(MotorControlPid& controller, EncoderReader& encoder)
+  +void pattern_pounce(MotorControlPid& controller, EncoderReader& encoder)
+  +void pattern_patrol(MotorControlPid& controller, EncoderReader& encoder)
+  +void pattern_twitch(MotorControlPid& controller, EncoderReader& encoder)
+  +void pattern_lurker(MotorControlPid& controller, EncoderReader& encoder)
+  +void runRandomPattern(MotorControlPid& controller, EncoderReader& encoder)
+  +void hauntingMode(MotorControlPid& controller, EncoderReader& encoder)
+}
+
+class Config {
+  ..constants, pin assignments..
+}
+
+' =============================
+' Relationships
+' =============================
+MotorControlPid --> MotorDriver : uses
+MotorControlPid --> EncoderReader : uses
+MotionController --> MotorControlPid : uses
+MotionController --> EncoderReader : uses
+MotionController --> MotorDriver : uses
+SerialCommandAdapter --> MotionController : delegates
+
+@enduml

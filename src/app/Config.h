@@ -1,0 +1,3 @@
+#pragma once
+#include <Arduino.h>
+// ...existing code from src/Config.h...

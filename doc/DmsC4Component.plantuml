@@ -1,0 +1,46 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+' =============================
+' Infrastructure Layer
+' =============================
+package "Infrastructure" {
+  Component_Ext(arduino, "Arduino Core", "C++ Library", "Hardware abstraction, timing, and IO.")
+  Component_Ext(pidlib, "PID_v1", "C++ Library", "PID control algorithm implementation.")
+}
+
+' =============================
+' Adapters Layer
+' =============================
+package "Adapters" {
+  Component(motorDriver, "MotorDriver", "Adapter", "Low-level interface to the motor driver IC.")
+  Component(encoderReader, "EncoderReader", "Adapter", "Low-level interface to the quadrature encoder.")
+  Component(serialAdapter, "SerialCommandAdapter", "Adapter", "Handles serial commands and delegates to the app layer.")
+}
+
+' =============================
+' Application/Use Cases Layer
+' =============================
+package "Application" {
+  Component(motionController, "MotionController", "Use Case", "Orchestrates high-level motion, patterns, and diagnostics.")
+  Component(motorControlPid, "MotorControlPid", "Use Case", "PID-based motion control logic.")
+  Component(motorSequencer, "MotorSequencer", "Use Case", "Runs update loops and motion criteria.")
+  Component(spiderPatterns, "SpiderPatterns", "Use Case", "Predefined spider/haunt motion patterns.")
+}
+
+' =============================
+' Relationships
+' =============================
+Rel(serialAdapter, motionController, "Delegates commands to")
+Rel(motionController, motorControlPid, "Controls via")
+Rel(motionController, motorSequencer, "Uses for update loops")
+Rel(motionController, spiderPatterns, "Triggers patterns via")
+Rel(motorControlPid, motorDriver, "Drives")
+Rel(motorControlPid, encoderReader, "Reads position from")
+Rel(motorControlPid, pidlib, "Uses PID algorithm")
+Rel(motorDriver, arduino, "Uses GPIO, PWM")
+Rel(encoderReader, arduino, "Uses GPIO, interrupts")
+Rel(motionController, arduino, "Uses timing, Serial")
+Rel(serialAdapter, arduino, "Uses Serial")
+@enduml
