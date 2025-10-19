@@ -21,7 +21,8 @@ void MotorControlPid::begin() {
 void MotorControlPid::moveToCounts(long counts, int maxSpeedPercent) {
   targetCounts_ = constrain(counts, 0L, MAX_TRAVEL_COUNTS);
   maxSpeedPercent = constrain(maxSpeedPercent, 1, 100);
-  maxSpeedFraction_ = maxSpeedPercent / 100.0f;
+  static constexpr float TO_PERCENT = 0.01f;
+  maxSpeedFraction_ = maxSpeedPercent * TO_PERCENT;
   pidSetpoint_ = (double)targetCounts_;
   pid_->SetOutputLimits(-1.0, 1.0); // TODO: Use maxSpeedFraction_
   moving_ = true;
