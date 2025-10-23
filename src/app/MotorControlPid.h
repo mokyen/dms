@@ -1,7 +1,7 @@
 #pragma once
 #include "../adapters/MotorDriver.h"
 #include "../adapters/EncoderReader.h"
-#include "../Config.h"
+#include "Config.h"
 #include <PID_v1.h>
 
 // --- PID Profiles ---
@@ -10,29 +10,66 @@ enum class PidProfile { Gentle, Balanced, Responsive };
 class MotorControlPid {
 public:
   MotorControlPid(MotorDriver& driver, EncoderReader& encoder);
+
   void begin();
   void moveToCounts(long targetCounts, int maxSpeedPercent = 100);
   void stop();
   void emergencyStop();
   void update();
-  bool isMoving() const { return moving_; }
-  bool hasArrived() const { return arrived_; }
-  long getTargetCounts() const { return targetCounts_; }
-  long getError() const { return targetCounts_ - encoder_.getPositionCounts(); }
+
+  bool isMoving() const { return m_moving; }
+  bool hasArrived() const { return m_arrived; }
+  long getTargetCounts() const { return m_targetCounts; }
+  long getError() const { return m_targetCounts - m_encoder.getPositionCounts(); }
+
+  // --- Feed-forward configuration ---
+  void setFeedForward(float up, float down) {
+    m_feedForwardUp = up;
+    m_feedForwardDown = down;
+  }
+  float getFeedForwardUp() const { return m_feedForwardUp; }
+  float getFeedForwardDown() const { return m_feedForwardDown; }
+
+  // --- PID profile control ---
+  void setPidProfile(PidProfile profile);
+  PidProfile getPidProfile() const { return m_activeProfile; }
+
+  // --- Manual tuning ---
+  void setPIDGains(double kp, double ki, double kd);
 
 private:
-  MotorDriver& motor_;
-  EncoderReader& encoder_;
-  long targetCounts_;
-  float maxSpeedFraction_;
-  bool moving_;
-  bool arrived_;
-  unsigned long moveStartMs_;
+  MotorDriver& m_motor;
+  EncoderReader& m_encoder;
+  long m_targetCounts;
+  float m_maxSpeedDecimal;
+  bool m_moving;
+  bool m_arrived;
+  unsigned long m_moveStartMs;
+
   // PID internals
-  double pidInput_;
-  double pidOutput_;
-  double pidSetpoint_;
-  PID* pid_;
-  PidProfile activeProfile_;
-  // Add any additional state as needed
+  double m_pidInput;
+  double m_pidOutput;
+  double m_pidSetpoint;
+  PID m_pid;
+
+  // Feed-forward (asymmetric)
+  float m_feedForwardUp;
+  float m_feedForwardDown;
+  static constexpr float CMD_DEADBAND = 0.02f;
+
+  // PID profile control
+  PidProfile m_activeProfile;
+
+  // PID gain tables
+  static constexpr double Kp_Gentle     = 0.00040;
+  static constexpr double Ki_Gentle     = 0.00050;
+  static constexpr double Kd_Gentle     = 0.00008;
+
+  static constexpr double Kp_Balanced   = 0.00055;
+  static constexpr double Ki_Balanced   = 0.00070;
+  static constexpr double Kd_Balanced   = 0.00012;
+
+  static constexpr double Kp_Responsive = 0.00090;
+  static constexpr double Ki_Responsive = 0.00090;
+  static constexpr double Kd_Responsive = 0.00018;
 };

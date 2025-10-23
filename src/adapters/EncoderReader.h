@@ -1,5 +1,5 @@
 #pragma once
-#include "../Config.h"
+#include "../app/Config.h"
 #include <Arduino.h>
 
 class EncoderReader {
