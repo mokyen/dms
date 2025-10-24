@@ -1,10 +1,11 @@
 #include "MotorControlPid.h"
 #include <Arduino.h>
 
+
 MotorControlPid::MotorControlPid(MotorDriver& driver, EncoderReader& encoder)
-  : m_motor(driver), m_encoder(encoder), m_targetCounts(0), m_maxSpeedDecimal(1.0f),
-    m_moving(false), m_arrived(false), m_moveStartMs(0), m_pidInput(0),
-    m_pidOutput(0), m_pidSetpoint(0), m_pid(&m_pidInput, &m_pidOutput, &m_pidSetpoint,
+  : m_motor(driver), m_encoder(encoder), m_targetCounts(0), m_maxSpeedDecimal(1.0f), m_moving(false),
+    m_arrived(false), m_moveStartMs(0), m_lastCommand(0.0f), m_pidInput(0), m_pidOutput(0),
+    m_pidSetpoint(0), m_pid(&m_pidInput, &m_pidOutput, &m_pidSetpoint,
       Kp_Gentle, Ki_Gentle, Kd_Gentle, DIRECT), m_feedForwardUp(0.20f),
       m_feedForwardDown(0.18f), m_activeProfile(PidProfile::Gentle)
     
@@ -70,6 +71,10 @@ void MotorControlPid::moveToCounts(long counts, int maxSpeedPercent) {
   m_pidSetpoint = static_cast<double>(m_targetCounts);
   m_pid.SetOutputLimits(-1.0, 1.0);
 
+  // **Detect if this is a descent**
+  long currentPos = m_encoder.getPositionCounts();
+  m_isDescending = (counts < currentPos);
+
   m_moving = true;
   m_arrived = false;
   m_moveStartMs = millis();
@@ -78,7 +83,11 @@ void MotorControlPid::moveToCounts(long counts, int maxSpeedPercent) {
   Serial.print(m_targetCounts);
   Serial.print(F(" counts @ "));
   Serial.print(maxSpeedPercent);
-  Serial.println(F("% max speed"));
+  Serial.print(F("% max speed"));
+  if (m_isDescending) {
+    Serial.print(F(" (DESCENT MODE)"));
+  }
+  Serial.println();
 }
 
 void MotorControlPid::update() {
@@ -100,12 +109,14 @@ void MotorControlPid::update() {
     if (m_targetCounts == 0) {
       // At the bottom, just stop. No holding torque needed.
       m_motor.stop();
+      Serial.println(F("Arrived at bottom!"));
     } else {
       // Apply holding torque to counteract gravity/load.
       // If error > 0 (below target), push up. If error < 0 (above target), pull down.
       float holdCommand = (error > 0) ? m_feedForwardUp : -m_feedForwardDown;
       holdCommand = constrain(holdCommand, -m_maxSpeedDecimal, m_maxSpeedDecimal);
       m_motor.setSpeed(holdCommand);
+      m_lastCommand = holdCommand; // Save the holding command for the next move's ramp
 
       Serial.print(F("Arrived! Holding torque applied (cmd="));
       Serial.print(holdCommand, 3);
@@ -117,31 +128,67 @@ void MotorControlPid::update() {
     return;
   }
 
-  // Compute PID
+  // **DESCENT MODE: Open-loop ramp with light position correction**
+  if (m_isDescending) {
+    // Target a gentle downward command
+    float targetCommand = -0.05f;  // Adjust this for descent speed
+    
+    // Ramp smoothly from current command (typically +0.20 from holding)
+    float commandDelta = targetCommand - m_lastCommand;
+    if (fabs(commandDelta) > 0.02f) {
+      m_lastCommand += copysignf(0.02f, commandDelta);
+    } else {
+      m_lastCommand = targetCommand;
+    }
+    
+    // Add gentle proportional correction as we approach target
+    if (absError < 500) {  // Within ~13 inches of target
+      float pCorrection = -0.0002f * error;  // Gentle P term
+      m_lastCommand += pCorrection;
+    }
+    
+    // Constrain to max speed
+    m_lastCommand = constrain(m_lastCommand, -m_maxSpeedDecimal, m_maxSpeedDecimal);
+    m_motor.setSpeed(m_lastCommand);
+    
+    // Debug print (every 50 ms)
+    static unsigned long lastPrintMs = 0;
+    if (millis() - lastPrintMs > 50) {
+      Serial.print(F("DESCENT ms=")); Serial.print(millis() - m_moveStartMs);
+      Serial.print(F(" pos=")); Serial.print(currentPos);
+      Serial.print(F(" tgt=")); Serial.print(m_targetCounts);
+      Serial.print(F(" err=")); Serial.print(error);
+      Serial.print(F(" cmd=")); Serial.print(m_lastCommand, 3);
+      Serial.print(F(" amps=")); Serial.println(m_motor.readCurrent(), 3);
+      lastPrintMs = millis();
+    }
+    
+    return;  // Skip normal PID
+  }
+
+  // **NORMAL PID CONTROL for upward motion**
   m_pidInput = static_cast<double>(currentPos);
   m_pid.Compute();
 
   // Apply asymmetric feed-forward
   float ff = (error > 0) ? m_feedForwardUp : -m_feedForwardDown;
   float command = static_cast<float>(m_pidOutput) + ff;
-
-  if (fabs(command) < CMD_DEADBAND) {
-    m_motor.stop();
-    return;
-  }
-
+  
   command = constrain(command, -m_maxSpeedDecimal, m_maxSpeedDecimal);
   m_motor.setSpeed(command);
+  m_lastCommand = command;
 
   // Debug print (every 50 ms)
   static unsigned long lastPrintMs = 0;
   if (millis() - lastPrintMs > 50) {
-    Serial.print(F("pos=")); Serial.print(currentPos);
+    Serial.print(F("ASCENT ms=")); Serial.print(millis() - m_moveStartMs);
+    Serial.print(F(" pos=")); Serial.print(currentPos);
     Serial.print(F(" tgt=")); Serial.print(m_targetCounts);
     Serial.print(F(" err=")); Serial.print(error);
     Serial.print(F(" pid=")); Serial.print(m_pidOutput, 3);
     Serial.print(F(" ff=")); Serial.print(ff, 3);
-    Serial.print(F(" cmd=")); Serial.println(command, 3);
+    Serial.print(F(" cmd=")); Serial.print(command, 3);
+    Serial.print(F(" amps=")); Serial.println(m_motor.readCurrent(), 3);
     lastPrintMs = millis();
   }
 }

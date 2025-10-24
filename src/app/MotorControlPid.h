@@ -47,6 +47,8 @@ private:
   bool m_moving;
   bool m_arrived;
   unsigned long m_moveStartMs;
+  bool m_isDescending;
+  float m_lastCommand;
 
   // PID internals
   double m_pidInput;
@@ -58,6 +60,7 @@ private:
   float m_feedForwardUp;
   float m_feedForwardDown;
   static constexpr float CMD_DEADBAND = 0.02f;
+  static constexpr float MAX_COMMAND_CHANGE_PER_UPDATE = 0.02f; // Ramp rate
 
   // PID profile control
   PidProfile m_activeProfile;
