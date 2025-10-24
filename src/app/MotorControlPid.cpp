@@ -6,7 +6,7 @@ MotorControlPid::MotorControlPid(MotorDriver& driver, EncoderReader& encoder)
     m_moving(false), m_arrived(false), m_moveStartMs(0), m_pidInput(0),
     m_pidOutput(0), m_pidSetpoint(0), m_pid(&m_pidInput, &m_pidOutput, &m_pidSetpoint,
       Kp_Gentle, Ki_Gentle, Kd_Gentle, DIRECT), m_feedForwardUp(0.20f),
-      m_feedForwardDown(0.10f), m_activeProfile(PidProfile::Gentle)
+      m_feedForwardDown(0.18f), m_activeProfile(PidProfile::Gentle)
     
 {
   m_pid.SetMode(AUTOMATIC);
@@ -133,9 +133,9 @@ void MotorControlPid::update() {
   command = constrain(command, -m_maxSpeedDecimal, m_maxSpeedDecimal);
   m_motor.setSpeed(command);
 
-  // Debug print (every 500 ms)
+  // Debug print (every 50 ms)
   static unsigned long lastPrintMs = 0;
-  if (millis() - lastPrintMs > 500) {
+  if (millis() - lastPrintMs > 50) {
     Serial.print(F("pos=")); Serial.print(currentPos);
     Serial.print(F(" tgt=")); Serial.print(m_targetCounts);
     Serial.print(F(" err=")); Serial.print(error);

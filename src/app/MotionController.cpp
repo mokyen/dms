@@ -2,6 +2,9 @@
 #include "MotorSequencer.h"
 #include "../app/SpiderPatterns.h"
 
+
+
+
 MotionController::MotionController(MotorControlPid& pid, EncoderReader& encoder, MotorDriver& motor)
   : pid_(pid), encoder_(encoder), motor_(motor) {}
 
@@ -48,6 +51,11 @@ void MotionController::handleCommand(char cmd, float value) {
       break;
     }
 
+    case 'h': {
+      printHelp();
+      break;
+    }
+
     default:
       Serial.print(F("Unknown command: "));
       Serial.println(cmd);
@@ -67,7 +75,7 @@ void MotionController::moveToTop() {
   pid_.moveToCounts(MAX_TRAVEL_COUNTS, 65);
 }
 void MotionController::moveToBottom() {
-  pid_.moveToCounts(0L, 45);
+  pid_.moveToCounts(0L, 10);
 }
 void MotionController::moveToPercent(float percent) {
   pid_.moveToCounts((long)((constrain(percent, 0.0f, 100.0f) / 100.0f) * MAX_TRAVEL_COUNTS), 100);
