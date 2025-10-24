@@ -15,14 +15,15 @@ MotorControlPid::MotorControlPid(MotorDriver& driver, EncoderReader& encoder)
 }
 
 void MotorControlPid::begin() {
-  motor_.begin();
-  encoder_.begin();
-  EncoderReader::attachInstance(&encoder_);
+  m_motor.begin();
+  m_encoder.begin();
+  EncoderReader::attachInstance(&m_encoder);
 }
 
 void MotorControlPid::stop() {
   m_motor.stop();
   m_moving = false;
+  m_arrived = false;
 }
 
 void MotorControlPid::emergencyStop() {
@@ -96,19 +97,23 @@ void MotorControlPid::update() {
 
   // Check if arrived
   if (absError <= POSITION_TOLERANCE_COUNTS) {
-    // Instead of dynamic brake, apply holding torque
-    float holdCommand = (error > 0)
-                          ? -m_feedForwardUp
-                          :  m_feedForwardDown;
+    if (m_targetCounts == 0) {
+      // At the bottom, just stop. No holding torque needed.
+      m_motor.stop();
+    } else {
+      // Apply holding torque to counteract gravity/load.
+      // If error > 0 (below target), push up. If error < 0 (above target), pull down.
+      float holdCommand = (error > 0) ? m_feedForwardUp : -m_feedForwardDown;
+      holdCommand = constrain(holdCommand, -m_maxSpeedDecimal, m_maxSpeedDecimal);
+      m_motor.setSpeed(holdCommand);
 
-    holdCommand = constrain(holdCommand, -m_maxSpeedDecimal, m_maxSpeedDecimal);
-    m_motor.setSpeed(holdCommand);
+      Serial.print(F("Arrived! Holding torque applied (cmd="));
+      Serial.print(holdCommand, 3);
+      Serial.println(F(")"));
+    }
 
     m_moving = false;
     m_arrived = true;
-    Serial.print(F("Arrived! Holding torque applied (cmd="));
-    Serial.print(holdCommand, 3);
-    Serial.println(F(")"));
     return;
   }
 

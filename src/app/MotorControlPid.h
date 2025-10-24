@@ -27,6 +27,8 @@ public:
     m_feedForwardUp = up;
     m_feedForwardDown = down;
   }
+  // new convenience overload
+  void setFeedForward(float ff) { setFeedForward(ff, ff); }
   float getFeedForwardUp() const { return m_feedForwardUp; }
   float getFeedForwardDown() const { return m_feedForwardDown; }
 

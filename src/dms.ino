@@ -1,30 +1,60 @@
 #include "app/Config.h"
 #include "adapters/MotorDriver.h"
 #include "adapters/EncoderReader.h"
-// #include "MotorControl.h"
 #include "app/MotorControlPid.h"
-// #include "MotionProfiles.h"
+#include "app/MotionController.h"
 #include "app/SpiderPatterns.h"
 
 // Create hardware instances for runtime initialization
 MotorDriver motor(MOTOR_PWM_PIN, MOTOR_INA_PIN, MOTOR_INB_PIN, MOTOR_CS_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN);
 
-// Controller needs to be non-const because it maintains state
-MotorControlPid controller(motor, encoder);
+// PID controller (low-level)
+MotorControlPid pid(motor, encoder);
+
+// Motion controller wrapper
+MotionController motion(pid, encoder, motor);
 
 // =======================================================
 // ================ Test Function Definitions ============
 // =======================================================
 
+// -----------------------------
+// Command mapping (cleaned)
+// -----------------------------
+// u/U  -> Move to top
+// d/D  -> Move to bottom
+// p <num> -> Move to percent (0-100)
+// s/S  -> Stop motor
+// z/Z  -> Zero encoder
+// r/R  -> Read position
+// j/J  -> Jog mode
+// c/C  -> Continuous monitor
+// m/M  -> Ramp speed test
+// l/L  -> Current limit test
+// f/F  -> Manual duty control (legacy)  (NOTE: lowercase f stayed for manual duty; 'G' used for feed-forward)
+// G <val> -> Set feed-forward (0.0 - 0.5)   <- new (avoids duplicate with 'f')
+// Q <num> -> Set PID profile (1=Gentle,2=Balanced,3=Responsive)
+// 1..5  -> Spider patterns
+// T     -> Run random pattern
+// A     -> Haunting mode (forever, blocking)
+// h/H   -> print help (keeps your existing dms.ino printHelp)
+// ?     -> printStatus
+//
+// Lines are read as a line (type key and optional numeric argument). Example:
+//    G 0.12
+//    p 45
+//    Q 2
+// -----------------------------
+
 void test_moveToTop() {
   Serial.println(F("Moving to TOP (45% speed)..."));
-  controller.moveToCounts(MAX_TRAVEL_COUNTS, 65);  // 45% for loaded operation
+  pid.moveToCounts(MAX_TRAVEL_COUNTS, 65);  // 45% for loaded operation
 }
 
 void test_moveToBottom() {
   Serial.println(F("Moving to BOTTOM (45% speed)..."));
-  controller.moveToCounts(0L, 45);  // 45% for loaded operation
+  pid.moveToCounts(0L, 45);  // 45% for loaded operation
 }
 
 void test_moveToPercent(float percent) {
@@ -35,7 +65,7 @@ void test_moveToPercent(float percent) {
   Serial.print(percent, 1);
   Serial.println(F("%"));
   
-  controller.moveToCounts(targetCounts, 100);  // Full speed for manual positioning
+  pid.moveToCounts(targetCounts, 100);  // Full speed for manual positioning
 }
 
 void test_stopMotor() {
@@ -140,7 +170,7 @@ void test_jogMode() {
           Serial.print(jogTargetCounts);
           Serial.println(F(" counts"));
           
-          controller.moveToCounts(jogTargetCounts);
+          pid.moveToCounts(jogTargetCounts);
           break;
         }
         
@@ -154,7 +184,7 @@ void test_jogMode() {
           Serial.print(jogTargetCounts);
           Serial.println(F(" counts"));
           
-          controller.moveToCounts(jogTargetCounts);
+          pid.moveToCounts(jogTargetCounts);
           break;
         }
         
@@ -191,7 +221,7 @@ void test_jogMode() {
     }
     
     // Update controller during jog mode
-    controller.update();
+    pid.update();
     delay(10);
   }
   
@@ -270,7 +300,7 @@ void test_continuousMonitor() {
     }
     
     // Update controller
-    controller.update();
+    pid.update();
     delay(10);
   }
   
@@ -802,10 +832,10 @@ void printStatus() {
   
   Serial.print(F("\n=== Control Parameters ==="));
   Serial.print(F("\nFeed-forward: "));
-  Serial.println(controller.getFeedForwardUp(), 3);
-  Serial.println(controller.getFeedForwardDown(), 3);
+  Serial.println(pid.getFeedForwardUp(), 3);
+  Serial.println(pid.getFeedForwardDown(), 3);
   Serial.print(F("PID profile: "));
-  switch (controller.getPidProfile()) {
+  switch (pid.getPidProfile()) {
     case PidProfile::Gentle:     Serial.println(F("Gentle")); break;
     case PidProfile::Balanced:   Serial.println(F("Balanced")); break;
     case PidProfile::Responsive: Serial.println(F("Responsive")); break;
@@ -818,16 +848,13 @@ void setup() {
   // Initialize board-specific hardware (ADC, PWM, Serial)
   initBoardSpecificHardware();
   
-  // Initialize motor control system
-  controller.begin();
-  
-  Serial.println(F("\n╔════════════════════════════════════╗"));
-  Serial.println(F("║  Decoration Motor System (DMS)     ║"));
-  Serial.println(F("╚════════════════════════════════════╝"));
+  pid.begin();
+  motion.setPidProfile(1); // start with Gentle
+  Serial.println(F("\n=== DMS starting ==="));
   
   // Print board info
-  Serial.print(F("\nBoard: "));
-  Serial.println(F(BOARD_NAME));
+  // Serial.print(F("\nBoard: "));
+  // Serial.println(F(BOARD_NAME));
   Serial.print(F("CPU: "));
   Serial.print(CPU_FREQUENCY_HZ / 1000000UL);
   Serial.println(F(" MHz"));
@@ -865,143 +892,36 @@ void setup() {
   
   // Optional: Automatic homing on startup
   // Uncomment the next line if you want to home to bottom on power-up
-  // controller.homeToBottom();
+  // pid.homeToBottom();
 
   Serial.print(F("POSITION_TOLERANCE_COUNTS = "));
   Serial.println(POSITION_TOLERANCE_COUNTS);
 }
 
 void loop() {
-  // Process serial commands
+  // Process serial input line-by-line
   if (Serial.available()) {
-    String input = Serial.readStringUntil('\n');
-    input.trim();
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) return;
 
-    if (input.length() == 0)
-      return;
+    // extract first token (command)
+    char cmd = line.charAt(0);
 
-    // Parse command
-    char cmd = input.charAt(0);
-    
-    switch (cmd) {
-      case 'u':
-      case 'U':
-        test_moveToTop();
-        break;
-      case 'd':
-        test_moveToBottom();
-        break;
-      case 'p':
-      case 'P': {
-        // Extract number after 'p'
-        String numStr = input.substring(1);
-        numStr.trim();
-        float percent = numStr.toFloat();
-        test_moveToPercent(percent);
-        break;
-      }
-      case 's':
-        test_stopMotor();
-        break;
-      case 'S':
-        test_stepResponse();
-        break;
-      case 'r':
-        test_printPosition();
-        break;
-      case 'R':
-        test_resistanceMeasurement();
-        break;
-      case 'm':
-      case 'M':
-        test_rampUpSpeed();
-        break;
-      case 'j':
-      case 'J':
-        test_jogMode();
-        break;
-      case 'c':
-      case 'C':
-        test_continuousMonitor();
-        break;
-      case 'l':
-      case 'L':
-        test_currentLimit();
-        break;
-      case 'f':
-      case 'F':
-        test_manualDutyMode();
-        break;
-      case 'K':
-        test_backEMF();
-        break;
-      case 'E':
-        test_rlsElectrical();
-        break;
-      case 'X':
-        test_continuousRLS();
-        break;
-      case 'z':
-      case 'Z':
-        test_zeroEncoder();
-        break;
-      case '1':
-        SpiderPatterns::pattern_stalker(controller, encoder);
-        break;
-      case '2':
-        SpiderPatterns::pattern_pounce(controller, encoder);
-        break;
-      case '3':
-        SpiderPatterns::pattern_patrol(controller, encoder);
-        break;
-      case '4':
-        SpiderPatterns::pattern_twitch(controller, encoder);
-        break;
-      case '5':
-        SpiderPatterns::pattern_lurker(controller, encoder);
-        break;
-      case 'A':
-        SpiderPatterns::hauntingMode(controller, encoder);
-        break;
-      case 'T':
-        SpiderPatterns::runRandomPattern(controller, encoder);
-        break;
-      case 'F': {
-        float newFF = Serial.parseFloat();
-        if (newFF >= 0.0f && newFF <= 0.5f) {
-          controller.setFeedForward(newFF);
-          Serial.print(F("Feed-forward set to "));
-          Serial.println(newFF, 3);
-        } else {
-          Serial.println(F("Feed-forward must be 0.0–0.5"));
-        }
-        break;
-      }
-      case 'Q': {
-        int idx = Serial.parseInt();
-        PidProfile profile = PidProfile::Gentle;
-        if (idx == 2) profile = PidProfile::Balanced;
-        else if (idx == 3) profile = PidProfile::Responsive;
-        controller.setPidProfile(profile);
-        break;
-      }
-      case 'h':
-      case 'H':
-        printHelp();
-        break;
-      case '?':
-        printStatus();
-        break;
-      default:
-        Serial.print(F("Unknown command: "));
-        Serial.println(cmd);
-        Serial.println(F("Type 'h' for help."));
-        break;
+    // parse numeric value if present
+    float value = 0.0f;
+    if (line.length() > 1) {
+      String rest = line.substring(1);
+      rest.trim();
+      if (rest.length() > 0) value = rest.toFloat();
     }
+
+    // route to motion controller
+    motion.handleCommand(cmd, value);
   }
   
-  // Update motor control (handles motion profiles, safety checks)
-  controller.update();
+  // Regular background update
+  motion.update();
   
   // Update continuous RLS if enabled
   updateContinuousRLS();
@@ -1027,7 +947,7 @@ void loop() {
 #endif
   
   // Small delay to prevent overwhelming the serial port
-  // On STM32, this can be very small or even removed
+  // small delay to avoid burning CPU
   #ifdef BOARD_ARDUINO_UNO
     delay(10);  // 100Hz update rate on Uno
   #else
