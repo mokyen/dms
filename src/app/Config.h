@@ -70,14 +70,14 @@ constexpr uint8_t ENCODER_B_PIN = 4;
 
 // constexpr float DISTANCE_TO_SYSTEM_FT = 18.0f;
 
-constexpr float DISTANCE_TO_SYSTEM_FT = 82.37f/12.0f; //Indoor testing
+constexpr float DISTANCE_TO_SYSTEM_FT = 115.37f/12.0f; //Indoor testing
 constexpr float DISTANCE_TO_SYSTEM_IN = DISTANCE_TO_SYSTEM_FT * 12.0f;
 constexpr float PULLEY_DIAMETER_IN = 16.5f;   // Diameter of pulley attached to motor shaft
 constexpr float PULLEY_CIRCUMFERENCE_IN = PULLEY_DIAMETER_IN * PI;
 
 constexpr float MAX_ROTATIONS = DISTANCE_TO_SYSTEM_IN / PULLEY_CIRCUMFERENCE_IN;
 
-constexpr float SAFETY_MARGIN_IN = 6.0f;  // Extra length to avoid bottoming out
+constexpr float SAFETY_MARGIN_IN = 6.0f;  // Extra length to avoid bottoAming out
 constexpr float MAX_TRAVEL_IN_FLOAT = DISTANCE_TO_SYSTEM_IN - SAFETY_MARGIN_IN; // ~210 inches
 
 // 64 CPR at motor shaft (16 CPR but 4x encoding) , 30:1 gearbox
