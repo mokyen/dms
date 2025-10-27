@@ -105,7 +105,7 @@ constexpr long POSITION_TOLERANCE_COUNTS = (long)(0.25f * COUNTS_PER_IN); // sto
 constexpr float MIN_DUTY_CYCLE = 0.1f;
 constexpr float MAX_DUTY_CYCLE = 1.0f;
 
-constexpr unsigned long MOVE_TIMEOUT_MS = 15000;  // safety stop
+constexpr unsigned long MOVE_TIMEOUT_MS = 5000;  // safety stop
 
 // ==============================================================================
 // MOTOR DRIVER CURRENT SENSING (VNH5019)

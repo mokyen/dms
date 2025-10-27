@@ -17,95 +17,132 @@ inline float countsToInches(long counts) {
   return counts * INV_COUNTS_PER_IN;
 }
 
-inline void cruiseToPosition(MotorControlPid& controller, EncoderReader& encoder, 
-                             float targetInches, float velocityInchesPerSec, 
-                             int updateRateHz = 50) {
-  float currentInches = encoder.getPositionInches();
-  float direction = (targetInches > currentInches) ? 1.0f : -1.0f;
-  float distance = abs(targetInches - currentInches);
+// Simple gentle move - just use your working moveToCounts
+inline void gentleMoveTo(MotorControlPid& controller, float targetInches) {
+  long targetCounts = inchesToCounts(targetInches);
+  controller.moveToCounts(targetCounts, 50);  // 65% max speed like your 'u' command
   
-  int stepsNeeded = (int)((distance / abs(velocityInchesPerSec)) * updateRateHz);
-  if (stepsNeeded < 1) stepsNeeded = 1;
-  static constexpr int MAX_STEPS = 12;
-  if (stepsNeeded > MAX_STEPS) stepsNeeded = MAX_STEPS;
-  
-  float positionIncrement = distance / stepsNeeded * direction;
-  
-  for (int step = 0; step < stepsNeeded; step++) {
-    currentInches += positionIncrement;
-    controller.moveToCounts(inchesToCounts(currentInches), 100);
-    runUpdateUntil(controller, timeout(1000 / updateRateHz));
+  // Wait for arrival
+  while (controller.isMoving()) {
+    controller.update();
+    delay(10);
   }
+}
+
+// Simple gentle move - just use your working moveToCounts
+inline void veryGentleMoveTo(MotorControlPid& controller, float targetInches) {
+  long targetCounts = inchesToCounts(targetInches);
+  controller.moveToCounts(targetCounts, 45);
   
-  controller.moveToCounts(inchesToCounts(targetInches), 100);
-  runUpdateUntilArrived(controller);
+  // Wait for arrival
+  while (controller.isMoving()) {
+    controller.update();
+    delay(10);
+  }
 }
 
 inline void pattern_stalker(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("Pattern: The Stalker"));
-  float burstHeight = 30.0f + random(0, 21);
-  cruiseToPosition(controller, encoder, burstHeight, 80.0f, 25);
-  runUpdateUntil(controller, timeout(500 + random(0, 501)));
-  float creepDistance = 20.0f + random(0, 11);
-  float creepTarget = burstHeight + creepDistance;
-  if (creepTarget > MAX_TRAVEL_IN_FLOAT) creepTarget = MAX_TRAVEL_IN_FLOAT;
-  cruiseToPosition(controller, encoder, creepTarget, 8.0f);
-  runUpdateUntil(controller, timeout(1000 + random(0, 1001)));
-  cruiseToPosition(controller, encoder, 0.0f, 50.0f);
+  
+  // Slow creep up
+  float height1 = 20.0f + random(0, 16);  // 20-35 inches
+  gentleMoveTo(controller, height1);
+  delay(800 + random(0, 801));  // Pause
+  
+  // Continue creeping
+  float height2 = height1 + 15.0f + random(0, 11);  // Add 15-25 inches
+  if (height2 > MAX_TRAVEL_IN_FLOAT) height2 = MAX_TRAVEL_IN_FLOAT;
+  gentleMoveTo(controller, height2);
+  delay(1200 + random(0, 1201));  // Long pause at top
+  
+  // Drop back down
+  gentleMoveTo(controller, 0.0f);
 }
 
 inline void pattern_pounce(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("Pattern: The Pounce"));
-  float midHeight = MAX_TRAVEL_IN_FLOAT * 0.6f;
-  cruiseToPosition(controller, encoder, midHeight, 10.0f);
-  cruiseToPosition(controller, encoder, MAX_TRAVEL_IN_FLOAT, 60.0f);
-  runUpdateUntil(controller, timeout(300 + random(0, 201)));
-  cruiseToPosition(controller, encoder, 0.0f, 55.0f);
+  
+  // Rise slowly to mid height
+  float midHeight = MAX_TRAVEL_IN_FLOAT * 0.5f;
+  gentleMoveTo(controller, midHeight);
+  delay(400 + random(0, 401));
+  
+  // Go to top
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);
+  delay(500 + random(0, 501));  // Pause at top
+  
+  // Drop
+  gentleMoveTo(controller, 0.0f);
 }
 
 inline void pattern_patrol(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("Pattern: The Patrol"));
-  float point1 = 80.0f + random(0, 51);
-  float point2 = 80.0f + random(0, 51);
-  float point3 = 80.0f + random(0, 51);
-  cruiseToPosition(controller, encoder, point1, 25.0f);
-  runUpdateUntil(controller, timeout(1000 + random(0, 1001)));
-  cruiseToPosition(controller, encoder, point2, 25.0f);
-  runUpdateUntil(controller, timeout(1000 + random(0, 1001)));
-  cruiseToPosition(controller, encoder, point3, 25.0f);
-  runUpdateUntil(controller, timeout(1000 + random(0, 1001)));
-  cruiseToPosition(controller, encoder, 0.0f, 35.0f);
+  
+  // Three gentle heights
+  float point1 = 25.0f + random(0, 21);  // 25-45 inches
+  float point2 = 40.0f + random(0, 21);  // 40-60 inches
+  float point3 = 55.0f + random(0, 21);  // 55-75 inches
+  
+  gentleMoveTo(controller, point1);
+  delay(1000 + random(0, 1001));
+  
+  gentleMoveTo(controller, point2);
+  delay(1000 + random(0, 1001));
+  
+  gentleMoveTo(controller, point3);
+  delay(1000 + random(0, 1001));
+  
+  gentleMoveTo(controller, 0.0f);
 }
 
 inline void pattern_twitch(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("Pattern: The Twitch"));
-  float startHeight = 40.0f + random(0, 21);
-  cruiseToPosition(controller, encoder, startHeight, 35.0f);
-  float currentPos = startHeight;
-  currentPos -= 10.0f;
-  cruiseToPosition(controller, encoder, currentPos, 30.0f);
-  currentPos += 15.0f;
-  cruiseToPosition(controller, encoder, currentPos, 30.0f);
-  currentPos -= 8.0f;
-  cruiseToPosition(controller, encoder, currentPos, 30.0f);
-  currentPos += 12.0f;
-  cruiseToPosition(controller, encoder, currentPos, 30.0f);
-  runUpdateUntil(controller, timeout(500));
-  if (random(0, 2) == 0) {
-    cruiseToPosition(controller, encoder, 0.0f, 45.0f);
-  } else {
-    cruiseToPosition(controller, encoder, MAX_TRAVEL_IN_FLOAT, 40.0f);
-  }
+  
+  // Start at a moderate height
+  float baseHeight = 30.0f + random(0, 16);  // 30-45 inches
+  gentleMoveTo(controller, baseHeight);
+  delay(300);
+  
+  // Small twitchy movements (all gentle)
+  gentleMoveTo(controller, baseHeight - 8.0f);
+  delay(200);
+  
+  gentleMoveTo(controller, baseHeight + 6.0f);
+  delay(200);
+  
+  gentleMoveTo(controller, baseHeight - 5.0f);
+  delay(200);
+  
+  gentleMoveTo(controller, baseHeight + 10.0f);
+  delay(400);
+  
+  // Return to bottom
+  gentleMoveTo(controller, 0.0f);
 }
 
 inline void pattern_lurker(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("Pattern: The Lurker"));
-  cruiseToPosition(controller, encoder, MAX_TRAVEL_IN_FLOAT, 6.0f);
-  runUpdateUntil(controller, timeout(2000 + random(0, 2001)));
+  
+  // Very slow rise to top
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);
+  delay(2500 + random(0, 2501));  // Long pause - lurking
+  
+  // Drop partway
   float midHeight = MAX_TRAVEL_IN_FLOAT * 0.4f;
-  cruiseToPosition(controller, encoder, midHeight, 20.0f);
-  runUpdateUntil(controller, timeout(500 + random(0, 501)));
-  cruiseToPosition(controller, encoder, 0.0f, 50.0f);
+  gentleMoveTo(controller, midHeight);
+  delay(600 + random(0, 601));
+  
+  // Return to bottom
+  gentleMoveTo(controller, 0.0f);
+}
+
+inline void pattern_zero_encoder(MotorControlPid& controller, EncoderReader& encoder) {
+  Serial.println(F("Haunting mode: resetting encoder to prevent drift."));
+  veryGentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);
+  delay(2000);
+  veryGentleMoveTo(controller, 0.0f);
+  delay(2000);
+  encoder.zero();
 }
 
 inline void runRandomPattern(MotorControlPid& controller, EncoderReader& encoder) {
@@ -121,13 +158,22 @@ inline void runRandomPattern(MotorControlPid& controller, EncoderReader& encoder
 
 inline void hauntingMode(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("=== HAUNTING MODE ACTIVATED ==="));
+
+  static int countSinceReset = 0;
+
   while (true) {
     runRandomPattern(controller, encoder);
-    unsigned long pauseMs = 1000 + random(0, 4001);
+    unsigned long pauseMs = 2000 + random(0, 4001);  // 2-6 second rest
     Serial.print(F("Resting for "));
     Serial.print(pauseMs / 1000.0f);
     Serial.println(F(" seconds..."));
-    runUpdateUntil(controller, timeout(pauseMs));
+    delay(pauseMs);
+
+    if (++countSinceReset >= 3) {
+      pattern_zero_encoder(controller, encoder);
+      countSinceReset = 0;
+      delay(pauseMs);
+    }
   }
 }
 

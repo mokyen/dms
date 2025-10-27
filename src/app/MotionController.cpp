@@ -72,7 +72,7 @@ void MotionController::update() {
 }
 
 void MotionController::moveToTop() {
-  pid_.moveToCounts(MAX_TRAVEL_COUNTS, 65);
+  pid_.moveToCounts(MAX_TRAVEL_COUNTS, 55);
 }
 void MotionController::moveToBottom() {
   pid_.moveToCounts(0L, 10);
