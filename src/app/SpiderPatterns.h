@@ -9,24 +9,6 @@
 
 namespace SpiderPatterns {
 
-// --- Percentage Helper ---
-
-/**
- * @brief Converts a percentage (0.0f to 100.0f) into an absolute height in inches
- * based on the globally defined MAX_TRAVEL_IN_FLOAT.
- * @param percent The target height as a percentage (e.g., 50.0f for 50%).
- * @return The corresponding height in inches.
- */
-inline float percentToInches(float percent) {
-  // Clamp the percentage to ensure it's within the 0-100% range
-  if (percent < 0.0f) percent = 0.0f;
-  if (percent > 100.0f) percent = 100.0f;
-  
-  return (percent / 100.0f) * MAX_TRAVEL_IN_FLOAT;
-}
-
-// --- Conversion Functions (Unchanged) ---
-
 inline long inchesToCounts(float inches) {
   return (long)(inches * COUNTS_PER_IN);
 }
@@ -35,12 +17,10 @@ inline float countsToInches(long counts) {
   return counts * INV_COUNTS_PER_IN;
 }
 
-// --- Movement Functions (Unchanged Interface) ---
-
-// Simple gentle move - takes inches, remains the low-level interface
+// Simple gentle move
 inline void gentleMoveTo(MotorControlPid& controller, float targetInches) {
   long targetCounts = inchesToCounts(targetInches);
-  controller.moveToCounts(targetCounts, 50);  // 65% max speed like your 'u' command
+  controller.moveToCounts(targetCounts, 55);  // 55% max speed
   
   // Wait for arrival
   while (controller.isMoving()) {
@@ -48,163 +28,183 @@ inline void gentleMoveTo(MotorControlPid& controller, float targetInches) {
     delay(10);
   }
 }
-
-// Simple gentle move - takes inches, remains the low-level interface
-inline void veryGentleMoveTo(MotorControlPid& controller, float targetInches) {
-  long targetCounts = inchesToCounts(targetInches);
-  controller.moveToCounts(targetCounts, 45);
-  
-  // Wait for arrival
-  while (controller.isMoving()) {
-    controller.update();
-    delay(10);
-  }
-}
-
-// --- Percentage-Based Patterns ---
 
 inline void pattern_stalker(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Pattern: The Stalker (Percentage-Based)"));
+  Serial.println(F("Pattern: The Stalker"));
   
-  // Slow creep up to a moderate height (25% to 45% of max travel)
-  // This replaces 20-35 inches
-  float height1_perc = 25.0f + random(0, 21);
-  gentleMoveTo(controller, percentToInches(height1_perc));
-  delay(800 + random(0, 801));  // Pause
+  gentleMoveTo(controller, 30.0f);  // Rise to 30 inches
+  delay(1000);
   
-  // Continue creeping upwards (add 20-30% of max travel)
-  // This replaces adding 15-25 inches
-  float height2_perc = height1_perc + 20.0f + random(0, 11);
+  gentleMoveTo(controller, 50.0f);  // Continue to 50 inches
+  delay(1500);
   
-  // Clamp to 100% (MAX_TRAVEL)
-  if (height2_perc > 100.0f) height2_perc = 100.0f; 
-  
-  gentleMoveTo(controller, percentToInches(height2_perc));
-  delay(1200 + random(0, 1201));  // Long pause at top
-  
-  // Drop back down to 0%
-  gentleMoveTo(controller, percentToInches(0.0f));
+  gentleMoveTo(controller, 0.0f);   // Drop
 }
 
 inline void pattern_pounce(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Pattern: The Pounce (Percentage-Based)"));
+  Serial.println(F("Pattern: The Pounce"));
   
-  // Rise slowly to mid height (50%)
-  float midHeight_perc = 50.0f;
-  gentleMoveTo(controller, percentToInches(midHeight_perc));
-  delay(400 + random(0, 401));
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT * 0.5f);  // Rise to mid
+  delay(500);
   
-  // Go to top (100%)
-  gentleMoveTo(controller, percentToInches(100.0f));
-  delay(500 + random(0, 501));  // Pause at top
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);         // Go to top
+  delay(800);
   
-  // Drop to 0%
-  gentleMoveTo(controller, percentToInches(0.0f));
+  gentleMoveTo(controller, 0.0f);                        // Drop
 }
 
 inline void pattern_patrol(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Pattern: The Patrol (Percentage-Based)"));
+  Serial.println(F("Pattern: The Patrol"));
   
-  // Three gentle heights (30-50%, 50-70%, 70-90%)
-  // Replaces 25-45in, 40-60in, 55-75in
-  float point1_perc = 30.0f + random(0, 21);  
-  float point2_perc = 50.0f + random(0, 21); 
-  float point3_perc = 70.0f + random(0, 21); 
+  gentleMoveTo(controller, 30.0f);
+  delay(1200);
   
-  gentleMoveTo(controller, percentToInches(point1_perc));
-  delay(1000 + random(0, 1001));
+  gentleMoveTo(controller, 50.0f);
+  delay(1200);
   
-  gentleMoveTo(controller, percentToInches(point2_perc));
-  delay(1000 + random(0, 1001));
+  gentleMoveTo(controller, 65.0f);
+  delay(1200);
   
-  gentleMoveTo(controller, percentToInches(point3_perc));
-  delay(1000 + random(0, 1001));
-  
-  gentleMoveTo(controller, percentToInches(0.0f));
-}
-
-inline void pattern_twitch(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Pattern: The Twitch (Percentage-Based)"));
-  
-  // Start at a moderate height (40-55% of max travel)
-  // Replaces 30-45 inches
-  float baseHeight_perc = 40.0f + random(0, 16); 
-  gentleMoveTo(controller, percentToInches(baseHeight_perc));
-  delay(300);
-  
-  // Small twitchy movements, now based on percentage of max travel (~10% range)
-  // Replaces offsets of 8in, 6in, 5in, 10in
-  gentleMoveTo(controller, percentToInches(baseHeight_perc - 10.0f));
-  delay(200);
-  
-  gentleMoveTo(controller, percentToInches(baseHeight_perc + 8.0f));
-  delay(200);
-  
-  gentleMoveTo(controller, percentToInches(baseHeight_perc - 7.0f));
-  delay(200);
-  
-  gentleMoveTo(controller, percentToInches(baseHeight_perc + 12.0f));
-  delay(400);
-  
-  // Return to bottom (0%)
-  gentleMoveTo(controller, percentToInches(0.0f));
+  gentleMoveTo(controller, 0.0f);
 }
 
 inline void pattern_lurker(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Pattern: The Lurker (Percentage-Based)"));
+  Serial.println(F("Pattern: The Lurker"));
   
-  // Very slow rise to top (100%)
-  gentleMoveTo(controller, percentToInches(100.0f));
-  delay(2500 + random(0, 2501));  // Long pause - lurking
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);  // Slow rise to top
+  delay(3000);  // Long pause - lurking
   
-  // Drop partway (40%)
-  float midHeight_perc = 40.0f;
-  gentleMoveTo(controller, percentToInches(midHeight_perc));
-  delay(600 + random(0, 601));
+  gentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT * 0.4f);  // Drop partway
+  delay(800);
   
-  // Return to bottom (0%)
-  gentleMoveTo(controller, percentToInches(0.0f));
+  gentleMoveTo(controller, 0.0f);  // Return to bottom
 }
 
-inline void pattern_zero_encoder(MotorControlPid& controller, EncoderReader& encoder) {
-  Serial.println(F("Haunting mode: resetting encoder to prevent drift."));
-  // These movements are already relative (100% and 0%)
-  veryGentleMoveTo(controller, MAX_TRAVEL_IN_FLOAT);
-  delay(2000);
-  veryGentleMoveTo(controller, 0.0f);
-  delay(2000);
+inline void pattern_zero_encoder(MotorControlPid& controller, EncoderReader& encoder, MotorDriver& motor) {
+  Serial.println(F("=== HOMING ROUTINE ==="));
+  Serial.println(F("Finding mechanical zero using current sensing..."));
+  
+  // Step 1: Move up to clear any bottom contact
+  Serial.println(F("Step 1: Moving up to clear bottom"));
+  gentleMoveTo(controller, 10.0f);
+  delay(1000);
+  
+  // Step 2: Slowly move down while monitoring current
+  Serial.println(F("Step 2: Searching for bottom (monitoring current)"));
+  
+  const float SEARCH_SPEED = -0.15f;
+  const float CURRENT_SPIKE_THRESHOLD = 2.5f;
+  const unsigned long SAMPLE_INTERVAL_MS = 20;
+  
+  controller.stop();
+  delay(100);
+  
+  bool foundBottom = false;
+  unsigned long lastSampleMs = millis();
+  float maxCurrent = 0.0f;
+  int stableHighCount = 0;
+  
+  motor.setSpeed(SEARCH_SPEED);
+  
+  unsigned long searchStartMs = millis();
+  const unsigned long SEARCH_TIMEOUT_MS = 30000;
+  
+  while (!foundBottom && (millis() - searchStartMs < SEARCH_TIMEOUT_MS)) {
+    unsigned long now = millis();
+    
+    if (now - lastSampleMs >= SAMPLE_INTERVAL_MS) {
+      lastSampleMs = now;
+      
+      float current = motor.readCurrent();
+      long position = encoder.getPositionCounts();
+      
+      if (current > maxCurrent) maxCurrent = current;
+      
+      if (current > CURRENT_SPIKE_THRESHOLD) {
+        stableHighCount++;
+        if (stableHighCount >= 3) {
+          foundBottom = true;
+          Serial.print(F("Bottom detected! Current: "));
+          Serial.print(current, 3);
+          Serial.print(F("A, Position: "));
+          Serial.println(position);
+        }
+      } else {
+        stableHighCount = 0;
+      }
+      
+      static unsigned long lastDebugMs = 0;
+      if (now - lastDebugMs > 500) {
+        Serial.print(F("Searching... pos="));
+        Serial.print(position);
+        Serial.print(F(" current="));
+        Serial.print(current, 3);
+        Serial.print(F("A maxCurrent="));
+        Serial.println(maxCurrent, 3);
+        lastDebugMs = now;
+      }
+    }
+    
+    delay(10);
+  }
+  
+  motor.stop();
+  
+  if (!foundBottom) {
+    Serial.println(F("ERROR: Homing timeout!"));
+    return;
+  }
+  
+  delay(500);
+  
+  // Step 3: Back off slightly
+  Serial.println(F("Step 3: Backing off from mechanical stop"));
+  long currentPos = encoder.getPositionCounts();
+  long backoffCounts = (long)(0.5f * COUNTS_PER_IN);
+  
+  controller.moveToCounts(currentPos + backoffCounts, 30);
+  while (controller.isMoving()) {
+    controller.update();
+    delay(10);
+  }
+  
+  // Step 4: Zero
+  Serial.println(F("Step 4: Setting encoder zero"));
   encoder.zero();
+  
+  Serial.println(F("=== HOMING COMPLETE ==="));
+  Serial.print(F("Max current seen: "));
+  Serial.print(maxCurrent, 3);
+  Serial.println(F("A"));
+  
+  delay(1000);
 }
 
-inline void runRandomPattern(MotorControlPid& controller, EncoderReader& encoder) {
-  int pattern = random(1, 6);
-  switch (pattern) {
+inline void runPattern(int patternNum, MotorControlPid& controller, EncoderReader& encoder) {
+  switch (patternNum) {
     case 1: pattern_stalker(controller, encoder); break;
     case 2: pattern_pounce(controller, encoder); break;
     case 3: pattern_patrol(controller, encoder); break;
-    case 4: pattern_twitch(controller, encoder); break;
-    case 5: pattern_lurker(controller, encoder); break;
+    case 4: pattern_lurker(controller, encoder); break;
+    default: 
+      Serial.println(F("Invalid pattern number"));
+      break;
   }
 }
 
 inline void hauntingMode(MotorControlPid& controller, EncoderReader& encoder) {
   Serial.println(F("=== HAUNTING MODE ACTIVATED ==="));
-
-  static int countSinceReset = 0;
-
+  int patternIndex = 1;
+  
   while (true) {
-    runRandomPattern(controller, encoder);
-    unsigned long pauseMs = 2000 + random(0, 4001);  // 2-6 second rest
-    Serial.print(F("Resting for "));
-    Serial.print(pauseMs / 1000.0f);
-    Serial.println(F(" seconds..."));
-    delay(pauseMs);
-
-    if (++countSinceReset >= 3) {
-      pattern_zero_encoder(controller, encoder);
-      countSinceReset = 0;
-      delay(pauseMs);
-    }
+    runPattern(patternIndex, controller, encoder);
+    
+    Serial.print(F("Resting for 3 seconds..."));
+    delay(3000);
+    
+    // Cycle through patterns: 1, 2, 3, 4, 1, 2, 3, 4...
+    patternIndex++;
+    if (patternIndex > 4) patternIndex = 1;
   }
 }
 

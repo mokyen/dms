@@ -39,10 +39,10 @@ inline void printHelp() {
   Serial.println(F("1       - Stalker Pattern"));
   Serial.println(F("2       - Pounce Pattern"));
   Serial.println(F("3       - Patrol Pattern"));
-  Serial.println(F("4       - Twitch Pattern"));
+  // Serial.println(F("4       - Twitch Pattern"));
   Serial.println(F("5       - Lurker Pattern"));
   Serial.println(F("A       - Haunting Mode"));
-  Serial.println(F("T       - Run Random Pattern"));
+  // Serial.println(F("T       - Run Random Pattern"));
   Serial.println(F(""));
   Serial.println(F("=== Control Parameters ==="));
   Serial.println(F("F <val> - Set feed-forward (0.0–0.5)"));
@@ -90,7 +90,7 @@ public:
   // Spider patterns
   void runPattern(int id);
   void hauntingMode();
-  void runRandomPattern();
+  // void runRandomPattern();
 
   // Configuration setters
   void setFeedForward(float ff);         // convenience single value (symmetric)

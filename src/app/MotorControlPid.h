@@ -54,6 +54,7 @@ private:
   double m_pidInput;
   double m_pidOutput;
   double m_pidSetpoint;
+  
   PID m_pid;
 
   // Feed-forward (asymmetric)

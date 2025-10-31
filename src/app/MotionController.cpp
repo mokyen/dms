@@ -32,7 +32,7 @@ void MotionController::handleCommand(char cmd, float value) {
     case '3': runPattern(3); break;
     case '4': runPattern(4); break;
     case '5': runPattern(5); break;
-    case 'T': runRandomPattern(); break;
+    // case 'T': runRandomPattern(); break;
     case 'A': hauntingMode(); break;
 
     // Tuning / configuration:
@@ -75,7 +75,7 @@ void MotionController::moveToTop() {
   pid_.moveToCounts(MAX_TRAVEL_COUNTS, 55);
 }
 void MotionController::moveToBottom() {
-  pid_.moveToCounts(0L, 10);
+  pid_.moveToCounts(0L, 55);
 }
 void MotionController::moveToPercent(float percent) {
   pid_.moveToCounts((long)((constrain(percent, 0.0f, 100.0f) / 100.0f) * MAX_TRAVEL_COUNTS), 100);
@@ -132,16 +132,16 @@ void MotionController::runPattern(int id) {
     case 1: SpiderPatterns::pattern_stalker(pid_, encoder_); break;
     case 2: SpiderPatterns::pattern_pounce(pid_, encoder_); break;
     case 3: SpiderPatterns::pattern_patrol(pid_, encoder_); break;
-    case 4: SpiderPatterns::pattern_twitch(pid_, encoder_); break;
-    case 5: SpiderPatterns::pattern_lurker(pid_, encoder_); break;
+    // case 4: SpiderPatterns::pattern_twitch(pid_, encoder_); break;
+    case 4: SpiderPatterns::pattern_lurker(pid_, encoder_); break;
   }
 }
 void MotionController::hauntingMode() {
   SpiderPatterns::hauntingMode(pid_, encoder_);
 }
-void MotionController::runRandomPattern() {
-  SpiderPatterns::runRandomPattern(pid_, encoder_);
-}
+// void MotionController::runRandomPattern() {
+//   SpiderPatterns::runRandomPattern(pid_, encoder_);
+// }
 
 // Configuration
 void MotionController::setFeedForward(float ff) {
